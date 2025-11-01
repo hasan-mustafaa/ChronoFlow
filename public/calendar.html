@@ -242,23 +242,40 @@
 
                 const eventsContainer = document.getElementById('events-container');
                 
-                if (data.events && data.events.length > 0) {
-                    eventsContainer.innerHTML = data.events.map(event => {
-                        const start = event.start.dateTime || event.start.date;
-                        const end = event.end.dateTime || event.end.date;
-                        const startDate = new Date(start);
-                        const endDate = new Date(end);
-                        
-                        return `
-                            <div class="event-item">
-                                <div class="event-title">${event.summary || 'No Title'}</div>
-                                <div class="event-time">
-                                    ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
-                                    ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                // Handle both old format (events) and new format (tasks)
+                const events = data.tasks || data.events || [];
+                
+                if (events.length > 0) {
+                    eventsContainer.innerHTML = events.map(item => {
+                        // If it's a task (new format)
+                        if (item.start_time && item.duration) {
+                            return `
+                                <div class="event-item">
+                                    <div class="event-title">${item.name || 'No Title'}</div>
+                                    <div class="event-time">
+                                        Start: ${item.start_time} | Duration: ${item.duration} | 
+                                        Fixed: ${item.fixed} | Priority: ${item.priority}
+                                    </div>
                                 </div>
-                                ${event.description ? `<div class="event-description">${event.description}</div>` : ''}
-                            </div>
-                        `;
+                            `;
+                        } else {
+                            // If it's an event (old format - for backward compatibility)
+                            const start = item.start?.dateTime || item.start?.date;
+                            const end = item.end?.dateTime || item.end?.date;
+                            const startDate = new Date(start);
+                            const endDate = new Date(end);
+                            
+                            return `
+                                <div class="event-item">
+                                    <div class="event-title">${item.summary || 'No Title'}</div>
+                                    <div class="event-time">
+                                        ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
+                                        ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </div>
+                                    ${item.description ? `<div class="event-description">${item.description}</div>` : ''}
+                                </div>
+                            `;
+                        }
                     }).join('');
                 } else {
                     eventsContainer.innerHTML = '<div class="loading">No upcoming events found.</div>';

@@ -4,6 +4,9 @@ node_modules/
 # Environment variables
 .env
 
+# User data
+user_data.json
+
 # Logs
 *.log
 npm-debug.log*

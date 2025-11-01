@@ -4,6 +4,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { google } = require('googleapis');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -105,12 +106,62 @@ app.get('/api/calendar', async (req, res) => {
         const response = await calendar.events.list({
             calendarId: 'primary',
             timeMin: new Date().toISOString(),
-            maxResults: 10,
+            maxResults: 100, // Get more events to convert to tasks
             singleEvents: true,
             orderBy: 'startTime',
         });
 
-        res.json({ events: response.data.items || [] });
+        // Format events according to original_tasks.json format
+        const tasks = (response.data.items || []).map(event => {
+            const hasDateTime = !!event.start.dateTime;
+            const start = event.start.dateTime || event.start.date;
+            const end = event.end.dateTime || event.end.date;
+            
+            const startDate = new Date(start);
+            const endDate = new Date(end);
+            
+            // For all-day events, use 00:00 as start time
+            // For timed events, use the actual time
+            let start_time;
+            if (hasDateTime) {
+                const startHours = String(startDate.getHours()).padStart(2, '0');
+                const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+                start_time = `${startHours}:${startMinutes}`;
+            } else {
+                // All-day event - default to 00:00
+                start_time = "00:00";
+            }
+            
+            // Calculate duration in hours and minutes
+            const durationMs = endDate.getTime() - startDate.getTime();
+            const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+            const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+            const duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
+            
+            return {
+                name: event.summary || 'Untitled Event',
+                fixed: false, // Default as requested
+                priority: 1, // Default as requested
+                start_time: start_time,
+                duration: duration
+            };
+        });
+
+        // Store data in user_data.json file
+        const dataToStore = {
+            tasks: tasks
+        };
+        const filePath = path.join(__dirname, 'user_data.json');
+        
+        try {
+            fs.writeFileSync(filePath, JSON.stringify(dataToStore, null, '\t'), 'utf8');
+            console.log(`Calendar data saved to ${filePath}`);
+        } catch (fileError) {
+            console.error('Error saving data to file:', fileError);
+            // Continue even if file write fails
+        }
+
+        res.json({ tasks: tasks });
     } catch (error) {
         console.error('Error fetching calendar:', error);
         res.status(500).json({ error: 'Failed to fetch calendar events' });
