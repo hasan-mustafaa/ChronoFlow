@@ -402,12 +402,23 @@ app.post('/api/add-events/save', async (req, res) => {
             return res.status(400).json({ error: 'Invalid events data' });
         }
 
-        // Prepare new events data with only name, priority, and fixed
-        const newEventsData = events.map(event => ({
-            name: event.name,
-            priority: event.priority || 'medium',
-            fixed: event.fixed || false
-        }));
+        // Prepare new events data with name, priority, fixed, and date/time if fixed
+        const newEventsData = events.map(event => {
+            const eventData = {
+                name: event.name,
+                priority: event.priority || 'medium',
+                fixed: event.fixed || false
+            };
+            
+            // Include date, startTime, and endTime if fixed is true
+            if (event.fixed && event.date && event.startTime && event.endTime) {
+                eventData.date = event.date;
+                eventData.startTime = event.startTime;
+                eventData.endTime = event.endTime;
+            }
+            
+            return eventData;
+        });
 
         // Save to new_events.json
         const filePath = path.join(__dirname, 'new_events.json');
