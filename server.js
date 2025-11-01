@@ -118,15 +118,24 @@ app.get('/api/calendar', async (req, res) => {
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
         
         // Default to week view for calendar page (can be made configurable later)
+        // Use current time in UTC for consistent date calculations
         const now = new Date();
         const timeMax = new Date(now);
-        timeMax.setDate(timeMax.getDate() + 7); // 7 days for week view
+        timeMax.setDate(timeMax.getDate() + 7); // Next 7 days from today
+        
+        // Set time to start of day (00:00:00) for timeMin to include all events today
+        const timeMinDate = new Date(now);
+        timeMinDate.setHours(0, 0, 0, 0);
+        
+        // Set timeMax to end of day (23:59:59) on the 7th day
+        const timeMaxDate = new Date(timeMax);
+        timeMaxDate.setHours(23, 59, 59, 999);
         
         const response = await calendar.events.list({
             calendarId: 'primary',
-            timeMin: now.toISOString(),
-            timeMax: timeMax.toISOString(),
-            maxResults: 100, // Get more events to convert to tasks
+            timeMin: timeMinDate.toISOString(),
+            timeMax: timeMaxDate.toISOString(),
+            maxResults: 2500, // Increased to handle more events (Google's max is 2500)
             singleEvents: true,
             orderBy: 'startTime',
         });
@@ -191,19 +200,27 @@ app.get('/api/setup/events', async (req, res) => {
         return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    try {
-        const timeRange = req.query.range || 'week'; // Default to week
-        const now = new Date();
-        const timeMax = new Date(now);
-        
-        // Set time range: week (7 days) or month (30 days)
-        if (timeRange === 'month') {
-            timeMax.setDate(timeMax.getDate() + 30);
-        } else {
-            timeMax.setDate(timeMax.getDate() + 7);
-        }
-        
-        console.log(`Fetching events for range: ${timeRange}, from ${now.toISOString()} to ${timeMax.toISOString()}`);
+        try {
+            const timeRange = req.query.range || 'week'; // Default to week
+            const now = new Date();
+            
+            // Set time range: week (7 days) or month (30 days) from TODAY
+            const timeMax = new Date(now);
+            if (timeRange === 'month') {
+                timeMax.setDate(timeMax.getDate() + 30); // Next 30 days from today
+            } else {
+                timeMax.setDate(timeMax.getDate() + 7); // Next 7 days from today
+            }
+            
+            // Set time to start of day (00:00:00) for timeMin to include all events today
+            const timeMinDate = new Date(now);
+            timeMinDate.setHours(0, 0, 0, 0);
+            
+            // Set timeMax to end of day (23:59:59) on the last day of the range
+            const timeMaxDate = new Date(timeMax);
+            timeMaxDate.setHours(23, 59, 59, 999);
+            
+            console.log(`Fetching events for range: ${timeRange}, from ${timeMinDate.toISOString()} to ${timeMaxDate.toISOString()}`);
 
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID,
@@ -220,9 +237,9 @@ app.get('/api/setup/events', async (req, res) => {
         
         const response = await calendar.events.list({
             calendarId: 'primary',
-            timeMin: now.toISOString(),
-            timeMax: timeMax.toISOString(),
-            maxResults: 100,
+            timeMin: timeMinDate.toISOString(),
+            timeMax: timeMaxDate.toISOString(),
+            maxResults: 2500, // Increased to handle more events (Google's max is 2500)
             singleEvents: true,
             orderBy: 'startTime',
         });
@@ -247,11 +264,13 @@ app.get('/api/setup/events', async (req, res) => {
                 if (!notConfigured) return false;
                 
                 // Additional validation: ensure event is within range
+                // Note: Google Calendar API should already filter by timeMin/timeMax,
+                // but we do a sanity check here. Use timeMinDate and timeMaxDate for comparison.
                 const eventStart = new Date(event.start.dateTime);
-                const isWithinRange = eventStart >= now && eventStart <= timeMax;
+                const isWithinRange = eventStart >= timeMinDate && eventStart <= timeMaxDate;
                 
                 if (!isWithinRange) {
-                    console.log(`Event "${event.summary}" outside range: ${eventStart.toISOString()}`);
+                    console.log(`Event "${event.summary}" (${event.id}) outside range: ${eventStart.toISOString()} (range: ${timeMinDate.toISOString()} to ${timeMaxDate.toISOString()})`);
                 }
                 
                 return isWithinRange;
