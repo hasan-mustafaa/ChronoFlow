@@ -32,3 +32,4 @@ class Task:
             "duration": self.duration.strftime("%H:%M")
         })
 
+
