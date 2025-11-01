@@ -277,7 +277,7 @@
             .then(data => {
                 if (data.user && data.user.emails && data.user.emails[0]) {
                     const userEmail = encodeURIComponent(data.user.emails[0].value);
-                    const calendarSrc = `https://calendar.google.com/calendar/embed?src=${userEmail}&ctz=America%2FNew_York`;
+                    const calendarSrc = `https://calendar.google.com/calendar/embed?src=${userEmail}&ctz=America%2FNew_York&mode=week`;
                     
                     const calendarContainer = document.getElementById('calendar-container');
                     calendarContainer.innerHTML = `
