@@ -382,6 +382,45 @@ app.post('/api/setup/save', async (req, res) => {
     }
 });
 
+// Route to serve add-events page
+app.get('/add-events', (req, res) => {
+    if (!req.user) {
+        return res.redirect('/');
+    }
+    res.sendFile(path.join(__dirname, 'public', 'add-events.html'));
+});
+
+// API endpoint to save manually added events
+app.post('/api/add-events/save', async (req, res) => {
+    if (!req.user || !req.user.accessToken) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        const { events } = req.body;
+        if (!events || !Array.isArray(events)) {
+            return res.status(400).json({ error: 'Invalid events data' });
+        }
+
+        // Prepare new events data with only name, priority, and fixed
+        const newEventsData = events.map(event => ({
+            name: event.name,
+            priority: event.priority || 'medium',
+            fixed: event.fixed || false
+        }));
+
+        // Save to new_events.json
+        const filePath = path.join(__dirname, 'new_events.json');
+        fs.writeFileSync(filePath, JSON.stringify(newEventsData, null, '\t'), 'utf8');
+        console.log(`New events saved to ${filePath}`);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error saving new events:', error);
+        res.status(500).json({ error: 'Failed to save events' });
+    }
+});
+
 // Helper function to load configured events
 function loadConfiguredEvents() {
     const filePath = path.join(__dirname, 'user_data.json');

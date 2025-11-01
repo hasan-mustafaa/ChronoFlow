@@ -6,6 +6,7 @@ node_modules/
 
 # User data
 user_data.json
+new_events.json
 
 # Logs
 *.log

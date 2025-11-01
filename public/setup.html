@@ -456,7 +456,7 @@
                     console.error('Error:', data.error);
                     document.getElementById('no-events').style.display = 'block';
                     setTimeout(() => {
-                        window.location.href = '/calendar';
+                        window.location.href = '/add-events';
                     }, 2000);
                     return;
                 }
@@ -464,7 +464,7 @@
                 if (!data.events || data.events.length === 0) {
                     document.getElementById('no-events').style.display = 'block';
                     setTimeout(() => {
-                        window.location.href = '/calendar';
+                        window.location.href = '/add-events';
                     }, 2000);
                     return;
                 }
@@ -477,7 +477,7 @@
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('no-events').style.display = 'block';
                     setTimeout(() => {
-                        window.location.href = '/calendar';
+                        window.location.href = '/add-events';
                     }, 2000);
                 });
         }
@@ -769,7 +769,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    window.location.href = '/calendar';
+                    window.location.href = '/add-events';
                 } else {
                     alert('Error saving configurations: ' + (data.error || 'Unknown error'));
                     button.disabled = false;

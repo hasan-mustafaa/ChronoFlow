@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add New Events - ChronoFlow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 2em;
+        }
+
+        .question-section {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .question-text {
+            font-size: 1.3em;
+            color: #555;
+            margin-bottom: 30px;
+        }
+
+        .yes-no-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .yes-no-btn {
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .yes-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .yes-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+
+        .no-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        .no-btn:hover {
+            background: #da190b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4);
+        }
+
+        .events-form-section {
+            display: none;
+        }
+
+        .events-form-section.active {
+            display: block;
+        }
+
+        .events-list {
+            margin-bottom: 30px;
+        }
+
+        .event-box {
+            background: #f9f9f9;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .event-number {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toggle-option {
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            background: white;
+        }
+
+        .toggle-option:hover {
+            border-color: #667eea;
+        }
+
+        .toggle-option.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .fixed-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .fixed-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            background: white;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .fixed-button:hover {
+            border-color: #667eea;
+        }
+
+        .fixed-button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .pin-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .action-btn {
+            padding: 15px 30px;
+            font-size: 1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .add-more-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        .add-more-btn:hover {
+            background: #0b7dda;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+        }
+
+        .continue-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .continue-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .signout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .signout-btn:hover {
+            background: #da190b;
+        }
+    </style>
+</head>
+<body>
+    <button class="signout-btn" onclick="signOut()">Sign Out</button>
+
+    <div class="container">
+        <h1>Add New Events</h1>
+
+        <div class="question-section" id="questionSection">
+            <p class="question-text">Would you like to add new events?</p>
+            <div class="yes-no-buttons">
+                <button class="yes-no-btn yes-btn" onclick="showEventForm()">Yes</button>
+                <button class="yes-no-btn no-btn" onclick="goToCalendar()">No</button>
+            </div>
+        </div>
+
+        <div class="events-form-section" id="eventsFormSection">
+            <div class="events-list" id="eventsList">
+                <!-- Event boxes will be added here dynamically -->
+            </div>
+
+            <div class="button-group">
+                <button class="action-btn add-more-btn" onclick="addEventBox()">Add More Events</button>
+                <button class="action-btn continue-btn" onclick="saveAndContinue()">Continue to Calendar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let events = [];
+        let eventCounter = 0;
+
+        function showEventForm() {
+            document.getElementById('questionSection').style.display = 'none';
+            document.getElementById('eventsFormSection').classList.add('active');
+            
+            // Add first event box
+            if (events.length === 0) {
+                addEventBox();
+            }
+        }
+
+        function addEventBox() {
+            eventCounter++;
+            const event = {
+                id: `manual_${Date.now()}_${eventCounter}`,
+                name: '',
+                priority: 'medium',
+                fixed: false
+            };
+            events.push(event);
+
+            renderEvents();
+        }
+
+        function removeEventBox(index) {
+            events.splice(index, 1);
+            renderEvents();
+        }
+
+        function renderEvents() {
+            const eventsList = document.getElementById('eventsList');
+            eventsList.innerHTML = events.map((event, index) => `
+                <div class="event-box">
+                    <div class="event-header">
+                        <span class="event-number">Event ${index + 1}</span>
+                        ${events.length > 1 ? `<button class="yes-no-btn no-btn" onclick="removeEventBox(${index})" style="padding: 8px 15px; font-size: 0.9em;">Remove</button>` : ''}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" 
+                               value="${event.name}" 
+                               onchange="updateEvent(${index}, 'name', this.value)"
+                               placeholder="Enter event name">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <div class="toggle-group">
+                            <div class="toggle-option ${event.priority === 'low' ? 'active' : ''}" 
+                                 onclick="togglePriority(${index}, 'low')">Low</div>
+                            <div class="toggle-option ${event.priority === 'medium' ? 'active' : ''}" 
+                                 onclick="togglePriority(${index}, 'medium')">Medium</div>
+                            <div class="toggle-option ${event.priority === 'high' ? 'active' : ''}" 
+                                 onclick="togglePriority(${index}, 'high')">High</div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Fixed Position</label>
+                        <div class="fixed-section">
+                            <button class="fixed-button ${event.fixed ? 'active' : ''}" 
+                                    onclick="toggleFixed(${index})">
+                                <svg class="pin-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12,2A8,8 0 0,0 4,10C4,16 12,22 12,22C12,22 20,16 20,10A8,8 0 0,0 12,2M12,12.5A2.5,2.5 0 0,1 9.5,10A2.5,2.5 0 0,1 12,7.5A2.5,2.5 0 0,1 14.5,10A2.5,2.5 0 0,1 12,12.5Z"/>
+                                </svg>
+                                Fixed Position
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateEvent(index, field, value) {
+            events[index][field] = value;
+        }
+
+        function togglePriority(index, priority) {
+            events[index].priority = priority;
+            renderEvents();
+        }
+
+        function toggleFixed(index) {
+            events[index].fixed = !events[index].fixed;
+            renderEvents();
+        }
+
+        function saveAndContinue() {
+            // Filter out events with empty names
+            const validEvents = events.filter(e => e.name.trim() !== '');
+            
+            if (validEvents.length === 0 && events.length > 0) {
+                alert('Please enter at least one event name, or remove empty events.');
+                return;
+            }
+
+            if (validEvents.length === 0) {
+                // No events to save, just go to calendar
+                goToCalendar();
+                return;
+            }
+
+            // Save events to server
+            fetch('/api/add-events/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ events: validEvents })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    goToCalendar();
+                } else {
+                    alert('Error saving events: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error saving events. Please try again.');
+            });
+        }
+
+        function goToCalendar() {
+            window.location.href = '/calendar';
+        }
+
+        function signOut() {
+            window.location.href = '/auth/logout';
+        }
+    </script>
+</body>
+</html>
+
