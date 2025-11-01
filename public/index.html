@@ -230,7 +230,8 @@
             .then(response => response.json())
             .then(data => {
                 if (data.user) {
-                    showUserInfo(data.user);
+                    // Redirect to calendar page if already logged in
+                    window.location.href = '/calendar';
                 }
             })
             .catch(error => {

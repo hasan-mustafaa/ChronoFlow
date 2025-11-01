@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChronoFlow - Calendar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px 40px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-profile img {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid #667eea;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .user-profile img:hover {
+            transform: scale(1.1);
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .user-name {
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+
+        .logout-btn {
+            color: #dc3545;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            color: #c82333;
+            text-decoration: underline;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .calendar-header h2 {
+            color: #333;
+            font-size: 2rem;
+        }
+
+        .calendar-embed {
+            width: 100%;
+            min-height: 600px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .events-list {
+            margin-top: 30px;
+        }
+
+        .events-list h3 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+
+        .event-item {
+            padding: 20px;
+            margin-bottom: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .event-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .event-title {
+            color: #333;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .event-time {
+            color: #666;
+            font-size: 0.95rem;
+            margin-bottom: 5px;
+        }
+
+        .event-description {
+            color: #888;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .error {
+            background: #ffe6e6;
+            color: #dc3545;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+
+            .user-profile {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .user-info {
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ChronoFlow</h1>
+        <div class="user-profile">
+            <div class="user-info">
+                <div class="user-name" id="user-name">Loading...</div>
+                <a href="/auth/logout" class="logout-btn">Sign Out</a>
+            </div>
+            <img id="user-avatar" src="" alt="User Avatar">
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="calendar-header">
+            <h2>Your Calendar</h2>
+        </div>
+
+        <div id="calendar-container">
+            <div class="loading">Loading calendar...</div>
+        </div>
+
+        <div class="events-list">
+            <h3>Upcoming Events</h3>
+            <div id="events-container">
+                <div class="loading">Loading events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load user info
+        fetch('/auth/user')
+            .then(response => response.json())
+            .then(data => {
+                if (data.user) {
+                    document.getElementById('user-avatar').src = data.user.photos[0].value;
+                    document.getElementById('user-name').textContent = data.user.displayName;
+                } else {
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading user:', error);
+                window.location.href = '/';
+            });
+
+        // Load calendar events
+        fetch('/api/calendar')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('events-container').innerHTML = 
+                        `<div class="error">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const eventsContainer = document.getElementById('events-container');
+                
+                if (data.events && data.events.length > 0) {
+                    eventsContainer.innerHTML = data.events.map(event => {
+                        const start = event.start.dateTime || event.start.date;
+                        const end = event.end.dateTime || event.end.date;
+                        const startDate = new Date(start);
+                        const endDate = new Date(end);
+                        
+                        return `
+                            <div class="event-item">
+                                <div class="event-title">${event.summary || 'No Title'}</div>
+                                <div class="event-time">
+                                    ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
+                                    ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </div>
+                                ${event.description ? `<div class="event-description">${event.description}</div>` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    eventsContainer.innerHTML = '<div class="loading">No upcoming events found.</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading calendar:', error);
+                document.getElementById('events-container').innerHTML = 
+                    '<div class="error">Failed to load calendar events. Please try again.</div>';
+            });
+
+        // Embed Google Calendar iframe
+        // Get user email for calendar embedding
+        fetch('/auth/user')
+            .then(response => response.json())
+            .then(data => {
+                if (data.user && data.user.emails && data.user.emails[0]) {
+                    const userEmail = encodeURIComponent(data.user.emails[0].value);
+                    const calendarSrc = `https://calendar.google.com/calendar/embed?src=${userEmail}&ctz=America%2FNew_York`;
+                    
+                    const calendarContainer = document.getElementById('calendar-container');
+                    calendarContainer.innerHTML = `
+                        <iframe 
+                            src="${calendarSrc}" 
+                            class="calendar-embed"
+                            frameborder="0" 
+                            scrolling="no"
+                            title="Google Calendar">
+                        </iframe>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading calendar embed:', error);
+                document.getElementById('calendar-container').innerHTML = 
+                    '<div class="error">Failed to load calendar. Please try again.</div>';
+            });
+    </script>
+</body>
+</html>
+
