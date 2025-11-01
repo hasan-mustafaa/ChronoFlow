@@ -242,40 +242,30 @@
 
                 const eventsContainer = document.getElementById('events-container');
                 
-                // Handle both old format (events) and new format (tasks)
-                const events = data.tasks || data.events || [];
+                // Display tasks in the new format
+                const tasks = data.tasks || [];
                 
-                if (events.length > 0) {
-                    eventsContainer.innerHTML = events.map(item => {
-                        // If it's a task (new format)
-                        if (item.start_time && item.duration) {
-                            return `
-                                <div class="event-item">
-                                    <div class="event-title">${item.name || 'No Title'}</div>
-                                    <div class="event-time">
-                                        Start: ${item.start_time} | Duration: ${item.duration} | 
-                                        Fixed: ${item.fixed} | Priority: ${item.priority}
-                                    </div>
-                                </div>
-                            `;
-                        } else {
-                            // If it's an event (old format - for backward compatibility)
-                            const start = item.start?.dateTime || item.start?.date;
-                            const end = item.end?.dateTime || item.end?.date;
-                            const startDate = new Date(start);
-                            const endDate = new Date(end);
-                            
-                            return `
-                                <div class="event-item">
-                                    <div class="event-title">${item.summary || 'No Title'}</div>
-                                    <div class="event-time">
-                                        ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
-                                        ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                    </div>
-                                    ${item.description ? `<div class="event-description">${item.description}</div>` : ''}
-                                </div>
-                            `;
+                if (tasks.length > 0) {
+                    eventsContainer.innerHTML = tasks.map(task => {
+                        // Convert numeric priority to string if needed (for backward compatibility)
+                        let priorityDisplay = task.priority;
+                        if (typeof task.priority === 'number') {
+                            priorityDisplay = task.priority === 0 ? 'low' : task.priority === 1 ? 'medium' : 'high';
+                        } else if (typeof task.priority === 'string') {
+                            priorityDisplay = task.priority;
                         }
+                        // Capitalize first letter
+                        priorityDisplay = priorityDisplay.charAt(0).toUpperCase() + priorityDisplay.slice(1);
+                        
+                        return `
+                            <div class="event-item">
+                                <div class="event-title">${task.name || 'No Title'}</div>
+                                <div class="event-time">
+                                    Start: ${task.start_time} | Duration: ${task.duration} | 
+                                    Fixed: ${task.fixed ? 'Yes' : 'No'} | Priority: ${priorityDisplay}
+                                </div>
+                            </div>
+                        `;
                     }).join('');
                 } else {
                     eventsContainer.innerHTML = '<div class="loading">No upcoming events found.</div>';
@@ -303,7 +293,8 @@
                             class="calendar-embed"
                             frameborder="0" 
                             scrolling="no"
-                            title="Google Calendar">
+                            title="Google Calendar"
+                            allow="cookies">
                         </iframe>
                     `;
                 }
