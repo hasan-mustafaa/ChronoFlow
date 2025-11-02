@@ -5,6 +5,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
+const OpenAI = require('openai');
 require('dotenv').config();
 
 const app = express();
@@ -511,6 +512,396 @@ app.get('/add-events', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'add-events.html'));
 });
 
+// ============================================
+// AI SCHEDULING FUNCTION
+// ============================================
+
+async function scheduleEventsWithAI(events) {
+    const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+    });
+
+    // Separate fixed events (already scheduled) from unscheduled events
+    const scheduledEvents = events.filter(e => e.start && e.end && e.start !== '' && e.end !== '');
+    const unscheduledEvents = events.filter(e => !e.start || !e.end || e.start === '' || e.end === '');
+
+    if (unscheduledEvents.length === 0) {
+        console.log('✅ No events to schedule');
+        return events;
+    }
+
+    console.log(`🤖 Scheduling ${unscheduledEvents.length} events using AI...`);
+
+    // Prepare prompt with existing events and events to schedule
+    const existingEventsInfo = scheduledEvents.map(e => ({
+        name: e.name,
+        start: e.start,
+        end: e.end,
+        duration: e.duration || '00:30'
+    }));
+
+    const eventsToSchedule = unscheduledEvents.map(e => ({
+        name: e.name,
+        priority: e.priority || 'medium',
+        purpose: e.purpose || 'personal',
+        duration: e.duration || '01:00',
+        fixed: e.fixed || false,
+        weekdaysOnly: e.weekdaysOnly !== false // Default to true
+    }));
+
+    const prompt = `You are a smart scheduling assistant. Schedule the following events optimally:
+
+**Already Scheduled Events** (cannot be moved or overlapped):
+${JSON.stringify(existingEventsInfo, null, 2)}
+
+**Events to Schedule**:
+${JSON.stringify(eventsToSchedule, null, 2)}
+
+**Rules:**
+1. Start from today: ${new Date().toISOString().split('T')[0]}
+2. NO overlaps - events cannot overlap with each other or existing events
+3. For each event, start_time + duration must not clash with any other event's time slot
+4. Timezone: America/New_York (EST/EDT)
+5. Higher priority events should get better time slots
+6. Events must fit within reasonable hours (08:00-21:00 for personal, 08:00-17:00 for business, 08:30-17:30 for school)
+7. Fixed events already have times set - don't reschedule them
+8. If weekdaysOnly is true, schedule events ONLY on weekdays (Monday-Friday), not on weekends (Saturday-Sunday)
+9. PRIORITY BIAS: For all events, prioritize scheduling between 10:00 AM - 7:00 PM (10:00-19:00) on weekdays. Higher priority events should get slots within this preferred window. Lower priority events can be scheduled outside this window if necessary, but still respect the weekdaysOnly constraint.
+10. Maintain at least 15 minutes buffer between events to prevent conflicts
+
+Return JSON only (no markdown, no explanations):
+{
+  "scheduled": [
+    { "name": "Event Name", "start": "2025-11-03T09:00:00-05:00", "end": "2025-11-03T10:00:00-05:00" }
+  ]
+}`;
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: "gpt-5-mini",
+            messages: [
+                { role: "system", content: "You return only valid JSON without any markdown formatting." },
+                { role: "user", content: prompt }
+            ]
+        });
+
+        let jsonText = completion.choices[0].message.content.trim();
+        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        const result = JSON.parse(jsonText);
+        const aiScheduled = result.scheduled || [];
+
+        console.log(`✅ AI scheduled ${aiScheduled.length} events`);
+
+        // Update unscheduled events with AI-generated times
+        const eventMap = new Map(unscheduledEvents.map(e => [e.name, e]));
+        aiScheduled.forEach(aiEvent => {
+            const original = eventMap.get(aiEvent.name);
+            if (original) {
+                console.log(`📅 AI scheduled "${aiEvent.name}": start=${aiEvent.start}, end=${aiEvent.end}`);
+                original.start = aiEvent.start;
+                
+                // Ensure end time matches start + duration
+                if (aiEvent.start && original.duration) {
+                    const startDate = new Date(aiEvent.start);
+                    const [hours, minutes] = original.duration.split(':').map(Number);
+                    const endDate = new Date(startDate.getTime() + (hours * 60 + minutes) * 60 * 1000);
+                    
+                    // Preserve the timezone format from start time
+                    const tzMatch = aiEvent.start.match(/([+-]\d{2}:\d{2})$/);
+                    if (tzMatch) {
+                        // Start has timezone offset, format end to match
+                        const timezone = tzMatch[1];
+                        // Extract the date/time parts from start
+                        const startParts = aiEvent.start.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+                        if (startParts) {
+                            // Calculate end time in the same timezone
+                            const startHour = parseInt(startParts[2]);
+                            const startMin = parseInt(startParts[3]);
+                            const startSec = parseInt(startParts[4]);
+                            
+                            let endHour = startHour + hours;
+                            let endMin = startMin + minutes;
+                            let endSec = startSec;
+                            let endDay = parseInt(startParts[1].substring(8, 10));
+                            let endMonth = parseInt(startParts[1].substring(5, 7));
+                            let endYear = parseInt(startParts[1].substring(0, 4));
+                            
+                            // Handle overflow
+                            if (endMin >= 60) {
+                                endHour += Math.floor(endMin / 60);
+                                endMin = endMin % 60;
+                            }
+                            if (endHour >= 24) {
+                                endDay += Math.floor(endHour / 24);
+                                endHour = endHour % 24;
+                            }
+                            
+                            original.end = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:${String(endSec).padStart(2, '0')}${timezone}`;
+                        } else {
+                            // Fallback: use Date formatting
+                            original.end = endDate.toISOString();
+                        }
+                    } else {
+                        // Use ISO string if no timezone in start
+                        original.end = endDate.toISOString();
+                    }
+                    console.log(`✅ Calculated end time for "${aiEvent.name}": ${original.end} (duration: ${original.duration})`);
+                } else {
+                    original.end = aiEvent.end;
+                    console.log(`✅ Using AI-provided end time for "${aiEvent.name}": ${original.end}`);
+                }
+            } else {
+                console.warn(`⚠️ Could not find original event for "${aiEvent.name}"`);
+            }
+        });
+
+        // Validate no clashes
+        const allEvents = [...scheduledEvents, ...unscheduledEvents];
+        const clashes = [];
+        
+        for (let i = 0; i < allEvents.length; i++) {
+            for (let j = i + 1; j < allEvents.length; j++) {
+                const e1 = allEvents[i];
+                const e2 = allEvents[j];
+                
+                if (e1.start && e1.end && e2.start && e2.end) {
+                    const start1 = new Date(e1.start);
+                    const end1 = new Date(e1.end);
+                    const start2 = new Date(e2.start);
+                    const end2 = new Date(e2.end);
+                    
+                    // Check if events overlap
+                    if (start1 < end2 && start2 < end1) {
+                        clashes.push(`${e1.name} and ${e2.name}`);
+                    }
+                }
+            }
+        }
+
+        if (clashes.length > 0) {
+            console.warn(`⚠️ Warning: Found ${clashes.length} potential clashes: ${clashes.join(', ')}`);
+        } else {
+            console.log('✅ No clashes detected');
+        }
+
+        return allEvents;
+    } catch (error) {
+        console.error('❌ AI scheduling error:', error.message);
+        // Return events as-is if AI scheduling fails
+        return events;
+    }
+}
+
+// Helper function to sync manually added events to Google Calendar
+async function syncEventsToGoogleCalendar(events, userAccessToken, userRefreshToken) {
+    try {
+        // Filter for manually added events that have been scheduled
+        console.log(`🔍 Checking ${events.length} events for sync...`);
+        const manualEvents = events.filter(event => {
+            const isManual = event.id && event.id.startsWith('manual_');
+            const hasTimes = event.start && event.end && event.start !== '' && event.end !== '';
+            if (isManual) {
+                console.log(`  Event "${event.name}": id=${event.id}, start=${event.start}, end=${event.end}, hasTimes=${hasTimes}`);
+            }
+            return isManual && hasTimes;
+        });
+
+        if (manualEvents.length === 0) {
+            console.log('⏭️ No scheduled manual events to sync');
+            const manualButNoTimes = events.filter(e => e.id && e.id.startsWith('manual_'));
+            if (manualButNoTimes.length > 0) {
+                console.log(`⚠️ Found ${manualButNoTimes.length} manual events but they lack start/end times:`);
+                manualButNoTimes.forEach(e => {
+                    console.log(`  - "${e.name}": start=${e.start}, end=${e.end}`);
+                });
+            }
+            return { created: 0, skipped: 0, errors: [] };
+        }
+
+        console.log(`📤 Syncing ${manualEvents.length} events to Google Calendar...`);
+
+        // Set up Google Calendar API client
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            "http://localhost:3000/auth/google/callback"
+        );
+
+        oauth2Client.setCredentials({
+            access_token: userAccessToken,
+            refresh_token: userRefreshToken
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // Get existing events to check for duplicates
+        const now = new Date();
+        const timeMinDate = new Date(now);
+        timeMinDate.setDate(timeMinDate.getDate() - 1); // Check from yesterday
+        const timeMaxDate = new Date(now);
+        timeMaxDate.setDate(timeMaxDate.getDate() + 30); // Check next 30 days
+
+        let existingEvents = [];
+        try {
+            const existingResponse = await calendar.events.list({
+                calendarId: 'primary',
+                timeMin: timeMinDate.toISOString(),
+                timeMax: timeMaxDate.toISOString(),
+                maxResults: 2500,
+                singleEvents: true,
+                orderBy: 'startTime',
+            });
+            existingEvents = existingResponse.data.items || [];
+        } catch (err) {
+            console.warn('⚠️ Could not fetch existing events for duplicate check:', err.message);
+        }
+
+        const results = {
+            created: 0,
+            skipped: 0,
+            errors: []
+        };
+
+        for (const event of manualEvents) {
+            try {
+                console.log(`🔍 Processing event for sync: "${event.name}", start: ${event.start}, end: ${event.end}`);
+                
+                // Check for duplicates by name and start time (within 1 minute tolerance)
+                const eventStartTime = new Date(event.start);
+                const isDuplicate = existingEvents.some(existing => {
+                    if (!existing.start.dateTime) return false;
+                    const existingStartTime = new Date(existing.start.dateTime);
+                    const timeDiff = Math.abs(eventStartTime.getTime() - existingStartTime.getTime());
+                    return existing.summary === event.name && timeDiff < 60000; // 1 minute tolerance
+                });
+
+                if (isDuplicate) {
+                    console.log(`⏭️ Skipping duplicate event: "${event.name}" at ${eventStartTime.toISOString()}`);
+                    results.skipped++;
+                    continue;
+                }
+                
+                console.log(`📝 Creating event "${event.name}" in Google Calendar...`);
+
+                // Create Google Calendar event object
+                const timezone = 'America/New_York';
+                let startDateTime = event.start;
+                let endDateTime = event.end;
+                
+                // Helper function to format datetime in ET timezone (for Google Calendar API with timeZone specified)
+                // When dateStr has timezone offset like "-05:00", extract the ET time directly
+                // When dateStr is UTC (ends with Z), convert to ET
+                const formatInET = (dateStr) => {
+                    // If it already has timezone offset, extract the datetime part
+                    if (dateStr.includes('-05:00') || dateStr.includes('-04:00') || (dateStr.includes('+') && !dateStr.endsWith('Z'))) {
+                        // Extract the datetime part before the timezone
+                        const tzMatch = dateStr.match(/^(.+?)([+-]\d{2}:\d{2})$/);
+                        if (tzMatch) {
+                            return tzMatch[1].replace(/\.\d{3}/, ''); // Remove milliseconds if present
+                        }
+                    }
+                    // If UTC (ends with Z), convert to ET
+                    if (dateStr.endsWith('Z')) {
+                        const date = new Date(dateStr);
+                        const etOffsetHours = -5; // EST offset
+                        const etDate = new Date(date.getTime() + (etOffsetHours * 60 * 60 * 1000));
+                        const year = etDate.getUTCFullYear();
+                        const month = String(etDate.getUTCMonth() + 1).padStart(2, '0');
+                        const day = String(etDate.getUTCDate()).padStart(2, '0');
+                        const hours = String(etDate.getUTCHours()).padStart(2, '0');
+                        const minutes = String(etDate.getUTCMinutes()).padStart(2, '0');
+                        const seconds = String(etDate.getUTCSeconds()).padStart(2, '0');
+                        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                    }
+                    // Fallback: parse and format
+                    const date = new Date(dateStr);
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                };
+                
+                // Handle UTC timestamps (ending with Z) - convert to ET
+                if (event.start.endsWith('Z')) {
+                    const utcDate = new Date(event.start);
+                    const utcEndDate = new Date(event.end);
+                    const etOffsetHours = -5; // EST offset
+                    
+                    const formatET = (utcDate) => {
+                        const etDate = new Date(utcDate.getTime() + (etOffsetHours * 60 * 60 * 1000));
+                        const year = etDate.getUTCFullYear();
+                        const month = String(etDate.getUTCMonth() + 1).padStart(2, '0');
+                        const day = String(etDate.getUTCDate()).padStart(2, '0');
+                        const hours = String(etDate.getUTCHours()).padStart(2, '0');
+                        const minutes = String(etDate.getUTCMinutes()).padStart(2, '0');
+                        const seconds = String(etDate.getUTCSeconds()).padStart(2, '0');
+                        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                    };
+                    
+                    startDateTime = formatET(utcDate);
+                    endDateTime = formatET(utcEndDate);
+                } else if (event.start.includes('+') || (event.start.includes('-') && !event.start.endsWith('Z'))) {
+                    // Start has timezone offset, convert to ET format
+                    startDateTime = formatInET(event.start);
+                    // Handle end time - might be UTC (Z) or have timezone
+                    if (event.end.endsWith('Z')) {
+                        // End is UTC, convert to ET
+                        endDateTime = formatInET(event.end);
+                    } else {
+                        // End has timezone or is local, convert to ET
+                        endDateTime = formatInET(event.end);
+                    }
+                } else {
+                    // No timezone info, use as-is (treat as ET)
+                    startDateTime = formatInET(event.start);
+                    endDateTime = formatInET(event.end);
+                }
+                
+                const calendarEvent = {
+                    summary: event.name || 'Untitled Event',
+                    start: {
+                        dateTime: startDateTime,
+                        timeZone: timezone
+                    },
+                    end: {
+                        dateTime: endDateTime,
+                        timeZone: timezone
+                    },
+                    description: `Priority: ${event.priority || ''}, Purpose: ${event.purpose || ''}, Fixed: ${event.fixed || false}`
+                };
+
+                // Insert event into Google Calendar
+                const response = await calendar.events.insert({
+                    calendarId: 'primary',
+                    resource: calendarEvent
+                });
+
+                console.log(`✅ Created event in Google Calendar: "${event.name}" (ID: ${response.data.id})`);
+                results.created++;
+
+            } catch (error) {
+                console.error(`❌ Error creating event "${event.name}":`, error.message);
+                console.error(`   Error details:`, JSON.stringify(error, null, 2));
+                results.errors.push({
+                    event: event.name,
+                    error: error.message
+                });
+            }
+        }
+
+        console.log(`✅ Synced ${results.created} events to Google Calendar (skipped: ${results.skipped}, errors: ${results.errors.length})`);
+        return results;
+    } catch (error) {
+        console.error('❌ Error syncing to Google Calendar:', error.message);
+        console.error('   Full error:', error);
+        return { created: 0, skipped: 0, errors: [{ error: error.message }] };
+    }
+}
+
 // API endpoint to save manually added events
 app.post('/api/add-events/save', async (req, res) => {
     if (!req.user || !req.user.accessToken) {
@@ -568,12 +959,20 @@ app.post('/api/add-events/save', async (req, res) => {
             const startDate = new Date(start);
             const endDate = new Date(end);
 
+            // Calculate duration from start and end times
+            const durationMs = endDate.getTime() - startDate.getTime();
+            const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+            const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+            const duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
+
             // Format for configuredEvents - using defaults, no existing config preserved
+            // Note: end is kept for scheduling compatibility, but duration is the source of truth
             configuredEvents.push({
                 id: event.id,
                 name: event.summary || 'Untitled Event',
                 start: start,
-                end: end,
+                end: end, // Kept for scheduling compatibility
+                duration: duration, // Source of truth - stored as HH:MM format
                 priority: 'medium',
                 purpose: 'personal',
                 fixed: false
@@ -588,11 +987,6 @@ app.post('/api/add-events/save', async (req, res) => {
             const startHours = String(startDate.getHours()).padStart(2, '0');
             const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
             const start_time = `${startHours}:${startMinutes}`;
-
-            const durationMs = endDate.getTime() - startDate.getTime();
-            const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
-            const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-            const duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
 
             // Format for tasks array - using defaults, no existing config preserved
             tasks.push({
@@ -641,17 +1035,19 @@ app.post('/api/add-events/save', async (req, res) => {
             const priority = (event.priority !== undefined && event.priority !== null) ? String(event.priority) : '';
             const purpose = (event.purpose !== undefined && event.purpose !== null) ? String(event.purpose) : '';
             const fixed = (event.fixed !== undefined && event.fixed !== null) ? Boolean(event.fixed) : false;
+            const weekdaysOnly = (event.weekdaysOnly !== undefined && event.weekdaysOnly !== null) ? Boolean(event.weekdaysOnly) : true; // Default to true
             
-            // Only fill date/time fields if fixed is true AND all date/time values are provided
-            if (fixed && event.date && event.startTime && event.endTime) {
-                // Parse date and times to create ISO strings
+            // Only fill date/time fields if fixed is true AND date, startTime, and duration are provided
+            if (fixed && event.date && event.startTime && event.durationHours !== undefined && event.durationMinutes !== undefined) {
+                // Parse date and start time to create ISO string
                 const startDateTime = new Date(`${event.date}T${event.startTime}`);
-                const endDateTime = new Date(`${event.date}T${event.endTime}`);
                 
-                // If end time is before start time, assume it's next day
-                if (endDateTime <= startDateTime) {
-                    endDateTime.setDate(endDateTime.getDate() + 1);
-                }
+                // Calculate end time from start time + duration
+                const durationHours = parseInt(event.durationHours) || 0;
+                const durationMinutes = parseInt(event.durationMinutes) || 0;
+                const endDateTime = new Date(startDateTime);
+                endDateTime.setHours(endDateTime.getHours() + durationHours);
+                endDateTime.setMinutes(endDateTime.getMinutes() + durationMinutes);
                 
                 startISO = startDateTime.toISOString();
                 endISO = endDateTime.toISOString();
@@ -666,21 +1062,27 @@ app.post('/api/add-events/save', async (req, res) => {
                 const startMinutes = String(startDateTime.getMinutes()).padStart(2, '0');
                 startTime = `${startHours}:${startMinutes}`;
                 
-                const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
-                const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                // Format duration as HH:MM
+                duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
+            } else if (!fixed && event.durationHours !== undefined && event.durationMinutes !== undefined) {
+                // For non-fixed events, just store duration (no date/time)
+                const durationHours = parseInt(event.durationHours) || 0;
+                const durationMinutes = parseInt(event.durationMinutes) || 0;
                 duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
             }
             
             // Add to configuredEvents array - all missing fields are empty strings
+            // Note: end is calculated from start + duration for scheduling, but duration is the source of truth
             configuredEvents.push({
                 id: eventId,
                 name: name,
                 start: startISO,
-                end: endISO,
+                end: endISO, // Calculated from start + duration, kept for scheduling compatibility
+                duration: duration, // Source of truth - stored as HH:MM format
                 priority: priority,
                 purpose: purpose,
-                fixed: fixed
+                fixed: fixed,
+                weekdaysOnly: weekdaysOnly
             });
             
             // Add to tasks array - all missing fields are empty strings
@@ -697,18 +1099,61 @@ app.post('/api/add-events/save', async (req, res) => {
             console.log(`📝 Added new event: ${name || '(no name)'} - priority: ${priority || '(empty)'}, purpose: ${purpose || '(empty)'}, fixed: ${fixed}`);
         });
 
-        // Create fresh user_data.json with Google Calendar events + new events
+        // Schedule unscheduled events using AI
+        const scheduledEvents = await scheduleEventsWithAI(configuredEvents);
+
+        // Update tasks array with scheduled times
+        const updatedTasks = scheduledEvents.map(event => {
+            // Find matching task by name
+            const matchingTask = tasks.find(t => t.name === event.name);
+            
+            if (event.start && event.end && event.start !== '' && event.end !== '') {
+                const startDate = new Date(event.start);
+                const endDate = new Date(event.end);
+                
+                const startYear = startDate.getFullYear();
+                const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+                const startDay = String(startDate.getDate()).padStart(2, '0');
+                const start_date = `${startYear}-${startMonth}-${startDay}`;
+                
+                const startHours = String(startDate.getHours()).padStart(2, '0');
+                const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+                const start_time = `${startHours}:${startMinutes}`;
+                
+                return {
+                    name: event.name,
+                    fixed: event.fixed || false,
+                    priority: matchingTask?.priority || event.priority || 'medium',
+                    start_date: start_date,
+                    start_time: start_time,
+                    duration: event.duration || matchingTask?.duration || '01:00',
+                    type: event.purpose || matchingTask?.type || 'personal'
+                };
+            } else {
+                // Keep original task if not scheduled
+                return matchingTask || {
+                    name: event.name,
+                    fixed: event.fixed || false,
+                    priority: event.priority || 'medium',
+                    start_date: '',
+                    start_time: '',
+                    duration: event.duration || '01:00',
+                    type: event.purpose || 'personal'
+                };
+            }
+        });
+
+        // Create fresh user_data.json with Google Calendar events + new events (with AI scheduling)
         const filePath = path.join(__dirname, 'user_data.json');
         const newData = {
-            configuredEvents: configuredEvents,
-            tasks: tasks,
+            configuredEvents: scheduledEvents,
+            tasks: updatedTasks,
             timeRanges: null
         };
 
         // Save new user_data.json
         fs.writeFileSync(filePath, JSON.stringify(newData, null, '\t'), 'utf8');
-<<<<<<< HEAD
-        console.log(`✅ Created fresh user_data.json with ${configuredEvents.length} events:`);
+        console.log(`✅ Created fresh user_data.json with ${scheduledEvents.length} events:`);
         console.log(`   - ${(response.data.items || []).filter(e => e.start?.dateTime).length} from Google Calendar`);
         console.log(`   - ${newEventsFromFile.length} from new_events.json`);
         console.log(`   - ${events.length} from request body`);
@@ -720,9 +1165,6 @@ app.post('/api/add-events/save', async (req, res) => {
             const savedData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             console.log(`✅ Verification: user_data.json contains ${savedData.configuredEvents?.length || 0} configuredEvents and ${savedData.tasks?.length || 0} tasks`);
         }
-=======
-        console.log(`Created user_data.json`);
->>>>>>> 6d1a0dba7a4647d2e49376ad45adfdd565a02873
 
         // Always create updated_data.json from user_data.json (synchronously to ensure it happens)
         const updatedDataPath = path.join(__dirname, 'updated_data.json');
@@ -754,45 +1196,33 @@ app.post('/api/add-events/save', async (req, res) => {
         } catch (copyError) {
             console.error(`❌ Error copying to updated_data.json:`, copyError);
         }
-        
-        // Also run dummy_reschedule.py as backup (but we've already copied above)
-        const { exec } = require('child_process');
-        const pythonScript = path.join(__dirname, 'dummy_reschedule.py');
-        const scriptDir = __dirname;
-        
-<<<<<<< HEAD
-        console.log(`🔄 Running dummy_reschedule.py as backup...`);
-        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, { 
-            cwd: scriptDir,
-            maxBuffer: 1024 * 1024 * 10
-        }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`⚠️ dummy_reschedule.py had error (but updated_data.json already created):`, error.message);
-            } else {
-                console.log(`✅ dummy_reschedule.py also executed successfully`);
-=======
-        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Error code: ${error.code}`);
-                console.error(`Error signal: ${error.signal}`);
-                if (stderr) console.error(`stderr: ${stderr}`);
-            } else {
-                console.log(`✅ dummy_reschedule.py executed successfully`);
-                if (stdout) console.log(`stdout: ${stdout}`);
-                if (stderr) console.log(`stderr: ${stderr}`);
-                
-                // Verify the file was created
-                const updatedDataPath = path.join(scriptDir, 'updated_data.json');
-                if (fs.existsSync(updatedDataPath)) {
-                    console.log(`✅ updated_data.json created at: ${updatedDataPath}`);
-                } else {
-                    console.error(`❌ updated_data.json was NOT created at: ${updatedDataPath}`);
-                }
->>>>>>> 6d1a0dba7a4647d2e49376ad45adfdd565a02873
-            }
-        });
 
-        res.json({ success: true });
+        // Automatically sync scheduled events to Google Calendar
+        console.log(`🔄 About to sync ${scheduledEvents.length} scheduled events...`);
+        const manualScheduled = scheduledEvents.filter(e => e.id && e.id.startsWith('manual_'));
+        console.log(`📋 Found ${manualScheduled.length} manual events in scheduledEvents:`);
+        manualScheduled.forEach(e => {
+            console.log(`  - "${e.name}": id=${e.id}, start=${e.start}, end=${e.end}, duration=${e.duration}`);
+        });
+        
+        const syncResults = await syncEventsToGoogleCalendar(
+            scheduledEvents,
+            req.user.accessToken,
+            req.user.refreshToken
+        );
+
+        if (syncResults.created > 0) {
+            console.log(`✅ Successfully synced ${syncResults.created} events to Google Calendar`);
+        }
+        if (syncResults.errors.length > 0) {
+            console.warn(`⚠️ Some events failed to sync: ${syncResults.errors.length} errors`);
+        }
+
+        res.json({ 
+            success: true,
+            synced: syncResults.created,
+            syncErrors: syncResults.errors.length
+        });
     } catch (error) {
         console.error('Error saving new events:', error);
         res.status(500).json({ error: 'Failed to save events' });

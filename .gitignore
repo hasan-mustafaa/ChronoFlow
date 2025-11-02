@@ -4,12 +4,6 @@ node_modules/
 # Environment variables
 .env
 
-# User data
-user_data.json
-new_events.json
-sync_info.json
-updated_data.json
-
 # Logs
 *.log
 npm-debug.log*

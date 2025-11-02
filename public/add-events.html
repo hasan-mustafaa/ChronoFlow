@@ -384,9 +384,11 @@
                 priority: 'medium',
                 purpose: 'personal',
                 fixed: false,
+                weekdaysOnly: true,
                 date: dateStr,
                 startTime: '12:00',
-                endTime: '13:00'
+                durationHours: '1',
+                durationMinutes: '0'
             };
             events.push(event);
 
@@ -436,14 +438,38 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label class="form-label">Duration</label>
+                        <div class="date-time-row">
+                            <div class="date-time-input">
+                                <label class="form-label" style="margin-bottom: 5px; font-size: 0.9em;">Hours</label>
+                                <input type="number" 
+                                       value="${event.durationHours || '1'}" 
+                                       onchange="updateEvent(${index}, 'durationHours', this.value)"
+                                       min="0" max="23">
+                            </div>
+                            <div class="date-time-input">
+                                <label class="form-label" style="margin-bottom: 5px; font-size: 0.9em;">Minutes</label>
+                                <input type="number" 
+                                       value="${event.durationMinutes || '0'}" 
+                                       onchange="updateEvent(${index}, 'durationMinutes', this.value)"
+                                       min="0" max="59">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="form-label">Fixed Position</label>
-                        <div class="fixed-section">
+                        <div class="fixed-section" style="display: flex; gap: 10px; align-items: center;">
                             <button class="fixed-button ${event.fixed ? 'active' : ''}" 
                                     onclick="toggleFixed(${index})">
                                 <svg class="pin-icon" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M12,2A8,8 0 0,0 4,10C4,16 12,22 12,22C12,22 20,16 20,10A8,8 0 0,0 12,2M12,12.5A2.5,2.5 0 0,1 9.5,10A2.5,2.5 0 0,1 12,7.5A2.5,2.5 0 0,1 14.5,10A2.5,2.5 0 0,1 12,12.5Z"/>
                                 </svg>
                                 Fixed Position
+                            </button>
+                            <button class="fixed-button ${event.weekdaysOnly !== false ? 'active' : ''}" 
+                                    onclick="toggleWeekdaysOnly(${index})"
+                                    style="white-space: nowrap;">
+                                Weekdays Only
                             </button>
                         </div>
                         <div class="date-time-fields ${event.fixed ? 'active' : ''}" id="dateTimeFields-${index}">
@@ -460,12 +486,6 @@
                                     <input type="time" 
                                            value="${event.startTime || '12:00'}" 
                                            onchange="updateEvent(${index}, 'startTime', this.value)">
-                                </div>
-                                <div class="date-time-input">
-                                    <label class="form-label" style="margin-bottom: 5px; font-size: 0.9em;">End Time</label>
-                                    <input type="time" 
-                                           value="${event.endTime || '13:00'}" 
-                                           onchange="updateEvent(${index}, 'endTime', this.value)">
                                 </div>
                             </div>
                         </div>
@@ -500,11 +520,19 @@
                 if (!events[index].startTime) {
                     events[index].startTime = '12:00';
                 }
-                if (!events[index].endTime) {
-                    events[index].endTime = '13:00';
+                if (!events[index].durationHours) {
+                    events[index].durationHours = '1';
+                }
+                if (!events[index].durationMinutes) {
+                    events[index].durationMinutes = '0';
                 }
             }
             
+            renderEvents();
+        }
+
+        function toggleWeekdaysOnly(index) {
+            events[index].weekdaysOnly = !events[index].weekdaysOnly;
             renderEvents();
         }
 
@@ -517,30 +545,13 @@
                 return;
             }
 
-            // Validate fixed events have date and times
+            // Validate fixed events have date, start time, and duration
             const fixedEventsMissingInfo = validEvents.filter(e => 
-                e.fixed && (!e.date || !e.startTime || !e.endTime)
+                e.fixed && (!e.date || !e.startTime || !e.durationHours || e.durationHours === '' || e.durationMinutes === '')
             );
             
             if (fixedEventsMissingInfo.length > 0) {
-                alert('Please fill in date, start time, and end time for all fixed position events.');
-                return;
-            }
-
-            // Validate end time is after start time
-            const invalidTimeEvents = validEvents.filter(e => {
-                if (e.fixed && e.startTime && e.endTime) {
-                    const start = e.startTime.split(':').map(Number);
-                    const end = e.endTime.split(':').map(Number);
-                    const startMinutes = start[0] * 60 + start[1];
-                    const endMinutes = end[0] * 60 + end[1];
-                    return endMinutes <= startMinutes;
-                }
-                return false;
-            });
-
-            if (invalidTimeEvents.length > 0) {
-                alert('End time must be after start time for fixed position events.');
+                alert('Please fill in date, start time, and duration for all fixed position events.');
                 return;
             }
 
@@ -550,20 +561,22 @@
                 return;
             }
 
-            // Prepare events data - only include date/time if fixed is true
+            // Prepare events data - include duration for all events, date/time if fixed
             const eventsToSave = validEvents.map(e => {
                 const eventData = {
                     name: e.name,
                     priority: e.priority,
                     purpose: e.purpose || 'personal',
-                    fixed: e.fixed
+                    fixed: e.fixed,
+                    weekdaysOnly: e.weekdaysOnly !== false, // Default to true
+                    durationHours: e.durationHours || '1',
+                    durationMinutes: e.durationMinutes || '0'
                 };
                 
                 // Only include date/time if fixed is true
                 if (e.fixed) {
                     eventData.date = e.date;
                     eventData.startTime = e.startTime;
-                    eventData.endTime = e.endTime;
                 }
                 
                 return eventData;
