@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChronoFlow - Google Authentication</title>
+    <title>ChronoFlow - AI Productivity Tool</title>
     <style>
         * {
             margin: 0;
@@ -19,92 +19,289 @@
             justify-content: center;
             align-items: center;
             padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Animated background elements */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .container {
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 80px;
-            max-width: 800px;
-            min-height: 600px;
-            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            padding: 50px 70px;
+            width: 75%;
+            max-width: 1100px;
+            min-width: 600px;
             text-align: center;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+            backdrop-filter: blur(10px);
+            min-height: auto;
             justify-content: center;
+            margin: 20px auto;
         }
 
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 5.5rem;
+        .logo-container {
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+        }
+
+        .logo-icon {
+            width: 100px;
+            height: 100px;
+            flex-shrink: 0;
+        }
+
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .logo-title {
+            font-size: 4.5rem;
             font-weight: 700;
+            color: #1a1a1a;
+            letter-spacing: -1px;
+            margin: 0;
+            line-height: 1.1;
         }
 
-        .glowing-text {
-            font-size: 2.2rem;
-            font-weight: 600;
+        .logo-tagline {
+            font-size: 1.1rem;
+            color: #666;
+            font-weight: 400;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .header-section {
+            margin: 0 0 25px 0;
+            text-align: center;
+        }
+
+        .section-header {
+            font-size: 1rem;
             color: #667eea;
-            margin-bottom: 40px;
-            animation: colorGlow 4s ease-in-out infinite;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        .main-headline {
+            font-size: 4.5rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin: 0 0 30px 0;
+            line-height: 1.2;
+        }
+
+        .main-headline .highlight {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            padding: 5px 12px;
+            border-radius: 8px;
+            color: #667eea;
+        }
+
+        .description {
+            font-size: 1.3rem;
+            color: #666;
+            line-height: 1.6;
+            max-width: 100%;
+            margin: 0 auto 20px;
+        }
+
+        .calendar-showcase {
+            margin: 50px 0 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        .calendar-image-container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .calendar-window {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .control {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .control.red {
+            background: #ff5f56;
+        }
+
+        .control.yellow {
+            background: #ffbd2e;
+        }
+
+        .control.green {
+            background: #27c93f;
+        }
+
+        .calendar-preview {
+            padding: 30px;
+            background: white;
+        }
+
+        .calendar-grid {
+            width: 100%;
+        }
+
+        .calendar-week {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+        }
+
+        .calendar-day {
+            text-align: center;
+            padding: 15px 10px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .calendar-day:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+
+        .calendar-day.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .day-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            opacity: 0.7;
+        }
+
+        .calendar-day.active .day-label {
+            opacity: 0.9;
+        }
+
+        .day-number {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .event-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 2px;
         }
 
         @keyframes colorGlow {
             0% {
                 color: #667eea;
                 text-shadow: 
-                    0 0 10px rgba(102, 126, 234, 0.8),
-                    0 0 20px rgba(102, 126, 234, 0.6),
-                    0 0 30px rgba(102, 126, 234, 0.4),
-                    0 0 40px rgba(102, 126, 234, 0.2);
+                    0 0 15px rgba(102, 126, 234, 0.8),
+                    0 0 25px rgba(102, 126, 234, 0.6),
+                    0 0 35px rgba(102, 126, 234, 0.4);
             }
             25% {
                 color: #4285f4;
                 text-shadow: 
-                    0 0 10px rgba(66, 133, 244, 0.8),
-                    0 0 20px rgba(66, 133, 244, 0.6),
-                    0 0 30px rgba(66, 133, 244, 0.4),
-                    0 0 40px rgba(66, 133, 244, 0.2);
+                    0 0 15px rgba(66, 133, 244, 0.8),
+                    0 0 25px rgba(66, 133, 244, 0.6),
+                    0 0 35px rgba(66, 133, 244, 0.4);
             }
             50% {
                 color: #ec4899;
                 text-shadow: 
-                    0 0 10px rgba(236, 72, 153, 0.8),
-                    0 0 20px rgba(236, 72, 153, 0.6),
-                    0 0 30px rgba(236, 72, 153, 0.4),
-                    0 0 40px rgba(236, 72, 153, 0.2);
+                    0 0 15px rgba(236, 72, 153, 0.8),
+                    0 0 25px rgba(236, 72, 153, 0.6),
+                    0 0 35px rgba(236, 72, 153, 0.4);
             }
             75% {
                 color: #06b6d4;
                 text-shadow: 
-                    0 0 10px rgba(6, 182, 212, 0.8),
-                    0 0 20px rgba(6, 182, 212, 0.6),
-                    0 0 30px rgba(6, 182, 212, 0.4),
-                    0 0 40px rgba(6, 182, 212, 0.2);
+                    0 0 15px rgba(6, 182, 212, 0.8),
+                    0 0 25px rgba(6, 182, 212, 0.6),
+                    0 0 35px rgba(6, 182, 212, 0.4);
             }
             100% {
                 color: #667eea;
                 text-shadow: 
-                    0 0 10px rgba(102, 126, 234, 0.8),
-                    0 0 20px rgba(102, 126, 234, 0.6),
-                    0 0 30px rgba(102, 126, 234, 0.4),
-                    0 0 40px rgba(102, 126, 234, 0.2);
+                    0 0 15px rgba(102, 126, 234, 0.8),
+                    0 0 25px rgba(102, 126, 234, 0.6),
+                    0 0 35px rgba(102, 126, 234, 0.4);
             }
         }
 
         .subtitle {
-            color: #666;
-            margin-bottom: 40px;
-            font-size: 2rem;
+            display: none;
+        }
+
+        .signin-section {
+            margin-top: 5px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
         }
 
         .user-info {
             display: none;
             margin-top: 30px;
-            padding: 20px;
-            background: #f5f5f5;
-            border-radius: 10px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            width: 100%;
         }
 
         .user-info.active {
@@ -116,7 +313,8 @@
             height: 120px;
             border-radius: 50%;
             margin-bottom: 20px;
-            border: 3px solid #667eea;
+            border: 4px solid #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
         }
 
         .user-info h2 {
@@ -132,33 +330,70 @@
         }
 
         .btn {
-            background: #4285f4;
+            background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
             color: white;
             border: none;
-            padding: 25px 60px;
-            font-size: 1.8rem;
-            border-radius: 35px;
+            padding: 20px 55px;
+            font-size: 1.5rem;
+            border-radius: 50px;
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
-            display: inline-block;
-            margin-top: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin: 0;
             font-weight: 600;
-            box-shadow: 0 5px 20px rgba(66, 133, 244, 0.3);
+            box-shadow: 0 8px 25px rgba(66, 133, 244, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
         }
 
         .btn:hover {
-            background: #357ae8;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(66, 133, 244, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(66, 133, 244, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn svg {
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn span {
+            position: relative;
+            z-index: 1;
         }
 
         .btn-logout {
-            background: #dc3545;
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4);
         }
 
         .btn-logout:hover {
-            background: #c82333;
+            box-shadow: 0 12px 35px rgba(220, 53, 69, 0.5);
         }
 
         .spinner {
@@ -184,35 +419,136 @@
         .error {
             color: #dc3545;
             margin-top: 15px;
-            padding: 10px;
+            padding: 15px;
             background: #ffe6e6;
-            border-radius: 5px;
+            border-radius: 10px;
             display: none;
+            font-size: 1rem;
         }
 
         .error.active {
             display: block;
         }
+
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 40px 30px;
+                min-height: auto;
+            }
+
+            .logo-container {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .logo-text {
+                align-items: center;
+                text-align: center;
+            }
+
+            .logo-title {
+                font-size: 2.5rem;
+            }
+
+            .main-headline {
+                font-size: 2.2rem;
+            }
+
+            .description {
+                font-size: 1rem;
+            }
+
+            .subtitle {
+                font-size: 1.1rem;
+            }
+
+            .btn {
+                padding: 15px 35px;
+                font-size: 1.1rem;
+            }
+
+            .calendar-week {
+                grid-template-columns: repeat(5, 1fr);
+                gap: 10px;
+            }
+
+            .calendar-day {
+                padding: 12px 5px;
+            }
+
+            .day-number {
+                font-size: 1.4rem;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ChronoFlow</h1>
-        <p class="glowing-text">Welcome to the future of productivity</p>
-        <p class="subtitle">Sign in with Google to continue</p>
-        
-        <div class="spinner" id="spinner"></div>
-        <div class="error" id="error"></div>
+        <div class="logo-container">
+            <svg class="logo-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <!-- Clock circle with gradient -->
+                <defs>
+                    <linearGradient id="clockGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#5B9BD5;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#4285F4;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- Clock circle (C shape) -->
+                <circle cx="40" cy="40" r="32" fill="none" stroke="url(#clockGradient)" stroke-width="6" 
+                        stroke-dasharray="200 200" stroke-dashoffset="50" transform="rotate(-90 40 40)"/>
+                
+                <!-- Clock hands -->
+                <line x1="40" y1="40" x2="40" y2="18" stroke="url(#clockGradient)" stroke-width="3" 
+                      stroke-linecap="round" transform="rotate(45 40 40)"/>
+                <line x1="40" y1="40" x2="55" y2="40" stroke="url(#clockGradient)" stroke-width="3" 
+                      stroke-linecap="round" transform="rotate(45 40 40)"/>
+                
+                <!-- Calendar icon -->
+                <rect x="58" y="28" width="38" height="42" rx="4" fill="#4285F4"/>
+                <rect x="58" y="28" width="38" height="8" rx="4" fill="#357ae8"/>
+                
+                <!-- Calendar grid (3x3) -->
+                <rect x="63" y="40" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="72" y="40" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="81" y="40" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="63" y="48" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="72" y="48" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="81" y="48" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="63" y="56" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="72" y="56" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+                <rect x="81" y="56" width="6" height="6" rx="1" fill="white" opacity="0.8"/>
+            </svg>
+            
+            <div class="logo-text">
+                <h1 class="logo-title">ChronoFlow</h1>
+                <p class="logo-tagline">AI productivity tool</p>
+            </div>
+        </div>
 
-        <div id="signin-section">
+        <div class="header-section">
+            <p class="section-header">YOUR NEW CALENDAR</p>
+            <h2 class="main-headline">
+                The calendar you <span class="highlight">need</span> to <span class="highlight">meet</span>
+            </h2>
+            <p class="description">
+                ChronoFlow evolves your calendar into a living, breathing workspace for teams to instantly make your meetings better.
+            </p>
+        </div>
+
+        <div class="signin-section">
+            <div class="spinner" id="spinner"></div>
+            <div class="error" id="error"></div>
+
             <a href="/auth/google" class="btn">
-                <svg width="28" height="28" style="vertical-align: middle; margin-right: 12px;" viewBox="0 0 24 24">
+                <svg width="24" height="24" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                     <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                     <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Sign in with Google
+                <span>Sign in with Google</span>
             </a>
         </div>
 
@@ -248,4 +584,3 @@
     </script>
 </body>
 </html>
-

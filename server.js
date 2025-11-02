@@ -255,10 +255,8 @@ app.get('/api/setup/events', async (req, res) => {
         console.log(`Total events from Google Calendar: ${response.data.items?.length || 0}`);
         console.log(`Already configured events: ${configuredEventIds.size}`);
 
-        // Filter to show:
-        // 1. New/unconfigured events
-        // 2. Previously configured events with purpose "personal" (so they can be re-configured)
-        // Excluding all-day events
+        // Filter to show only new/unconfigured events
+        // Excluding all-day events and already configured events
         // Note: Google Calendar API already filters by timeMin/timeMax, but we do additional filtering
         const newEvents = (response.data.items || [])
             .filter(event => {
@@ -277,19 +275,12 @@ app.get('/api/setup/events', async (req, res) => {
                     return false;
                 }
                 
-                // Include unconfigured events
+                // Only include unconfigured events - exclude all configured events regardless of purpose
                 const notConfigured = !configuredEventIds.has(event.id);
-                if (notConfigured) return true;
-                
-                // Include configured events that have purpose "personal" so they can be re-configured
-                const configured = configuredEventMap.get(event.id);
-                if (configured && configured.purpose === 'personal') {
-                    console.log(`Including personal event for re-configuration: "${event.summary}" (${event.id})`);
-                    return true;
+                if (!notConfigured) {
+                    console.log(`Excluding configured event: "${event.summary}" (${event.id})`);
                 }
-                
-                // Exclude other configured events
-                return false;
+                return notConfigured;
             })
             .map(event => {
                 const start = event.start.dateTime;
@@ -318,6 +309,41 @@ app.get('/api/setup/events', async (req, res) => {
     }
 });
 
+// API endpoint to get available time ranges
+app.get('/api/setup/time-ranges', (req, res) => {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        const filePath = path.join(__dirname, 'user_data.json');
+        let timeRanges = null;
+        
+        if (fs.existsSync(filePath)) {
+            try {
+                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                timeRanges = data.timeRanges || null;
+            } catch (err) {
+                console.error('Error reading user_data.json:', err);
+            }
+        }
+
+        // Default time ranges if none exist
+        if (!timeRanges) {
+            timeRanges = {
+                personal: { start: '09:00', end: '17:00' },
+                business: { start: '09:00', end: '17:00' },
+                school: { start: '09:00', end: '17:00' }
+            };
+        }
+
+        res.json({ timeRanges });
+    } catch (error) {
+        console.error('Error fetching time ranges:', error);
+        res.status(500).json({ error: 'Failed to fetch time ranges' });
+    }
+});
+
 // API endpoint to save event configurations
 app.post('/api/setup/save', async (req, res) => {
     if (!req.user || !req.user.accessToken) {
@@ -325,12 +351,23 @@ app.post('/api/setup/save', async (req, res) => {
     }
 
     try {
-        const { events } = req.body;
+        const { events, timeRanges } = req.body;
         if (!events || !Array.isArray(events)) {
             return res.status(400).json({ error: 'Invalid events data' });
         }
 
-        // Load existing configured events
+        // Load existing configured events and data
+        const filePath = path.join(__dirname, 'user_data.json');
+        let existingData = {};
+        if (fs.existsSync(filePath)) {
+            try {
+                existingData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            } catch (err) {
+                console.error('Error reading existing user_data.json:', err);
+                existingData = {};
+            }
+        }
+
         const configuredEvents = loadConfiguredEvents();
         const configuredEventMap = new Map(configuredEvents.map(e => [e.id, e]));
 
@@ -348,11 +385,11 @@ app.post('/api/setup/save', async (req, res) => {
         });
 
         // Save to user_data.json with both tasks format and configured events tracking
-        const filePath = path.join(__dirname, 'user_data.json');
         const configuredEventsArray = Array.from(configuredEventMap.values());
         
         const dataToStore = {
             configuredEvents: configuredEventsArray, // Store full event configs for tracking
+            timeRanges: timeRanges || existingData.timeRanges || null, // Store time ranges
             tasks: configuredEventsArray.map(event => {
                 const startDate = new Date(event.start);
                 const endDate = new Date(event.end);
@@ -422,11 +459,12 @@ app.post('/api/add-events/save', async (req, res) => {
             return res.status(400).json({ error: 'Invalid events data' });
         }
 
-        // Prepare new events data with name, priority, fixed, and date/time if fixed
+        // Prepare new events data with name, priority, purpose, fixed, and date/time if fixed
         const newEventsData = events.map(event => {
             const eventData = {
                 name: event.name,
                 priority: event.priority || 'medium',
+                purpose: event.purpose || 'personal',
                 fixed: event.fixed || false
             };
             

@@ -244,6 +244,17 @@
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
 
+        .cancel-btn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .cancel-btn:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.4);
+        }
+
         .signout-btn {
             position: absolute;
             top: 20px;
@@ -324,6 +335,7 @@
             </div>
 
             <div class="button-group">
+                <button class="action-btn cancel-btn" onclick="goToHome()">Cancel</button>
                 <button class="action-btn add-more-btn" onclick="addEventBox()">Add More Events</button>
                 <button class="action-btn continue-btn" onclick="saveAndContinue()">Continue to Calendar</button>
             </div>
@@ -333,6 +345,22 @@
     <script>
         let events = [];
         let eventCounter = 0;
+
+        // Check if we should skip the question and go directly to the form
+        function checkDirectMode() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('direct') === 'true') {
+                // Hide the question section and show the form directly
+                showEventForm();
+            }
+        }
+
+        // Run on page load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkDirectMode);
+        } else {
+            checkDirectMode();
+        }
 
         function showEventForm() {
             document.getElementById('questionSection').style.display = 'none';
@@ -354,6 +382,7 @@
                 id: `manual_${Date.now()}_${eventCounter}`,
                 name: '',
                 priority: 'medium',
+                purpose: 'personal',
                 fixed: false,
                 date: dateStr,
                 startTime: '12:00',
@@ -393,6 +422,17 @@
                                  onclick="togglePriority(${index}, 'medium')">Medium</div>
                             <div class="toggle-option ${event.priority === 'high' ? 'active' : ''}" 
                                  onclick="togglePriority(${index}, 'high')">High</div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Purpose</label>
+                        <div class="toggle-group">
+                            <div class="toggle-option ${event.purpose === 'personal' ? 'active' : ''}" 
+                                 onclick="togglePurpose(${index}, 'personal')">Personal</div>
+                            <div class="toggle-option ${event.purpose === 'business' ? 'active' : ''}" 
+                                 onclick="togglePurpose(${index}, 'business')">Business</div>
+                            <div class="toggle-option ${event.purpose === 'school' ? 'active' : ''}" 
+                                 onclick="togglePurpose(${index}, 'school')">School</div>
                         </div>
                     </div>
                     <div class="form-group">
@@ -440,6 +480,11 @@
 
         function togglePriority(index, priority) {
             events[index].priority = priority;
+            renderEvents();
+        }
+
+        function togglePurpose(index, purpose) {
+            events[index].purpose = purpose;
             renderEvents();
         }
 
@@ -510,6 +555,7 @@
                 const eventData = {
                     name: e.name,
                     priority: e.priority,
+                    purpose: e.purpose || 'personal',
                     fixed: e.fixed
                 };
                 
@@ -547,6 +593,10 @@
 
         function goToCalendar() {
             window.location.href = '/calendar';
+        }
+
+        function goToHome() {
+            window.location.href = '/';
         }
 
         function signOut() {

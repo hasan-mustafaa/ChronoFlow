@@ -174,6 +174,86 @@
             font-size: 1.1rem;
         }
 
+        .available-time-ranges {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .available-time-ranges h3 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .section-description {
+            color: #666;
+            font-size: 0.95rem;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .time-ranges-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .time-range-card {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .time-range-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.2);
+        }
+
+        .time-range-label {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #667eea;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .time-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .time-input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .time-input-wrapper label {
+            font-size: 0.9rem;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .time-input {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .time-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
         .events-list {
             display: flex;
             flex-direction: column;
@@ -378,8 +458,53 @@
 
         .no-events h3 {
             font-size: 1.5rem;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             color: #333;
+        }
+
+        .no-events .question-text {
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 30px;
+        }
+
+        .yes-no-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .yes-no-btn {
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .yes-no-btn.yes-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .yes-no-btn.yes-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+
+        .yes-no-btn.no-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        .yes-no-btn.no-btn:hover {
+            background: #da190b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(244, 67, 54, 0.4);
         }
     </style>
 </head>
@@ -407,10 +532,60 @@
             <span class="toggle-label">Monthly</span>
         </div>
 
+        <div class="available-time-ranges">
+            <h3>Available Time Ranges</h3>
+            <p class="section-description">Set your available hours for each purpose</p>
+            <div class="time-ranges-grid">
+                <div class="time-range-card">
+                    <div class="time-range-label">Personal</div>
+                    <div class="time-input-group">
+                        <div class="time-input-wrapper">
+                            <label>Start Time:</label>
+                            <input type="time" id="personal-start" class="time-input" value="09:00">
+                        </div>
+                        <div class="time-input-wrapper">
+                            <label>End Time:</label>
+                            <input type="time" id="personal-end" class="time-input" value="17:00">
+                        </div>
+                    </div>
+                </div>
+                <div class="time-range-card">
+                    <div class="time-range-label">Business</div>
+                    <div class="time-input-group">
+                        <div class="time-input-wrapper">
+                            <label>Start Time:</label>
+                            <input type="time" id="business-start" class="time-input" value="09:00">
+                        </div>
+                        <div class="time-input-wrapper">
+                            <label>End Time:</label>
+                            <input type="time" id="business-end" class="time-input" value="17:00">
+                        </div>
+                    </div>
+                </div>
+                <div class="time-range-card">
+                    <div class="time-range-label">School</div>
+                    <div class="time-input-group">
+                        <div class="time-input-wrapper">
+                            <label>Start Time:</label>
+                            <input type="time" id="school-start" class="time-input" value="09:00">
+                        </div>
+                        <div class="time-input-wrapper">
+                            <label>End Time:</label>
+                            <input type="time" id="school-end" class="time-input" value="17:00">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="loading" class="loading">Loading events...</div>
         <div id="no-events" class="no-events" style="display: none;">
             <h3>No new events to configure</h3>
-            <p>Redirecting to calendar...</p>
+            <p class="question-text">Would you like to add new events?</p>
+            <div class="yes-no-buttons">
+                <button class="yes-no-btn yes-btn" onclick="goToAddEvents()">Yes</button>
+                <button class="yes-no-btn no-btn" onclick="goToCalendar()">No</button>
+            </div>
         </div>
         <div id="events-list" class="events-list" style="display: none;"></div>
         
@@ -438,6 +613,32 @@
                 window.location.href = '/';
             });
 
+        // Load available time ranges
+        function loadTimeRanges() {
+            fetch('/api/setup/time-ranges')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.timeRanges) {
+                        const ranges = data.timeRanges;
+                        if (ranges.personal) {
+                            document.getElementById('personal-start').value = ranges.personal.start || '09:00';
+                            document.getElementById('personal-end').value = ranges.personal.end || '17:00';
+                        }
+                        if (ranges.business) {
+                            document.getElementById('business-start').value = ranges.business.start || '09:00';
+                            document.getElementById('business-end').value = ranges.business.end || '17:00';
+                        }
+                        if (ranges.school) {
+                            document.getElementById('school-start').value = ranges.school.start || '09:00';
+                            document.getElementById('school-end').value = ranges.school.end || '17:00';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading time ranges:', error);
+                });
+        }
+
         // Load events that need configuration
         function loadEvents() {
             document.getElementById('loading').style.display = 'block';
@@ -455,17 +656,11 @@
                 if (data.error) {
                     console.error('Error:', data.error);
                     document.getElementById('no-events').style.display = 'block';
-                    setTimeout(() => {
-                        window.location.href = '/add-events';
-                    }, 2000);
                     return;
                 }
 
                 if (!data.events || data.events.length === 0) {
                     document.getElementById('no-events').style.display = 'block';
-                    setTimeout(() => {
-                        window.location.href = '/add-events';
-                    }, 2000);
                     return;
                 }
 
@@ -476,9 +671,6 @@
                     console.error('Error loading events:', error);
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('no-events').style.display = 'block';
-                    setTimeout(() => {
-                        window.location.href = '/add-events';
-                    }, 2000);
                 });
         }
 
@@ -515,6 +707,7 @@
         }
 
         // Initial load
+        loadTimeRanges();
         loadEvents();
 
         function displayEvents(events) {
@@ -759,12 +952,31 @@
             button.disabled = true;
             button.textContent = 'Saving...';
 
+            // Get time ranges
+            const timeRanges = {
+                personal: {
+                    start: document.getElementById('personal-start').value,
+                    end: document.getElementById('personal-end').value
+                },
+                business: {
+                    start: document.getElementById('business-start').value,
+                    end: document.getElementById('business-end').value
+                },
+                school: {
+                    start: document.getElementById('school-start').value,
+                    end: document.getElementById('school-end').value
+                }
+            };
+
             fetch('/api/setup/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ events: eventsData })
+                body: JSON.stringify({ 
+                    events: eventsData,
+                    timeRanges: timeRanges
+                })
             })
             .then(response => response.json())
             .then(data => {
@@ -782,6 +994,14 @@
                 button.disabled = false;
                 button.textContent = 'Save & Continue';
             });
+        }
+
+        function goToAddEvents() {
+            window.location.href = '/add-events?direct=true';
+        }
+
+        function goToCalendar() {
+            window.location.href = '/calendar';
         }
     </script>
 </body>
