@@ -183,7 +183,10 @@ app.get('/api/calendar', async (req, res) => {
                     fixed: configured?.fixed !== undefined ? configured.fixed : false,
                     priority: priorityValue,
                     start_time: start_time,
-                    duration: duration
+                    duration: duration,
+                    type: configured?.purpose || 'personal', // Include purpose/type for analytics
+                    start_date: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+                    durationMinutes: Math.floor(durationMs / (1000 * 60)) // Duration in minutes for calculations
                 };
             });
 
@@ -246,22 +249,22 @@ app.get('/api/setup/events', async (req, res) => {
 
         // Load already configured events
         const configuredEvents = loadConfiguredEvents();
+        const configuredEventMap = new Map(configuredEvents.map(e => [e.id, e]));
         const configuredEventIds = new Set(configuredEvents.map(e => e.id));
         
         console.log(`Total events from Google Calendar: ${response.data.items?.length || 0}`);
         console.log(`Already configured events: ${configuredEventIds.size}`);
 
-        // Filter to only show new/unconfigured events, excluding all-day events
+        // Filter to show:
+        // 1. New/unconfigured events
+        // 2. Previously configured events with purpose "personal" (so they can be re-configured)
+        // Excluding all-day events
         // Note: Google Calendar API already filters by timeMin/timeMax, but we do additional filtering
         const newEvents = (response.data.items || [])
             .filter(event => {
                 // Exclude all-day events (they only have date, not dateTime)
                 const hasDateTime = !!event.start.dateTime;
                 if (!hasDateTime) return false;
-                
-                // Exclude already configured events
-                const notConfigured = !configuredEventIds.has(event.id);
-                if (!notConfigured) return false;
                 
                 // Additional validation: ensure event is within range
                 // Note: Google Calendar API should already filter by timeMin/timeMax,
@@ -271,22 +274,39 @@ app.get('/api/setup/events', async (req, res) => {
                 
                 if (!isWithinRange) {
                     console.log(`Event "${event.summary}" (${event.id}) outside range: ${eventStart.toISOString()} (range: ${timeMinDate.toISOString()} to ${timeMaxDate.toISOString()})`);
+                    return false;
                 }
                 
-                return isWithinRange;
+                // Include unconfigured events
+                const notConfigured = !configuredEventIds.has(event.id);
+                if (notConfigured) return true;
+                
+                // Include configured events that have purpose "personal" so they can be re-configured
+                const configured = configuredEventMap.get(event.id);
+                if (configured && configured.purpose === 'personal') {
+                    console.log(`Including personal event for re-configuration: "${event.summary}" (${event.id})`);
+                    return true;
+                }
+                
+                // Exclude other configured events
+                return false;
             })
             .map(event => {
                 const start = event.start.dateTime;
                 const end = event.end.dateTime;
+                
+                // Check if this event was previously configured
+                const previouslyConfigured = configuredEventMap.get(event.id);
                 
                 return {
                     id: event.id,
                     name: event.summary || 'Untitled Event',
                     start: start,
                     end: end,
-                    priority: 'medium', // Default: Medium
-                    purpose: 'personal', // Default: personal (can be business, personal, or school)
-                    fixed: false // Default: not fixed
+                    // Use previously configured values if available, otherwise use defaults
+                    priority: previouslyConfigured?.priority || 'medium',
+                    purpose: previouslyConfigured?.purpose || 'personal', // Default: personal (can be business, personal, or school)
+                    fixed: previouslyConfigured?.fixed !== undefined ? previouslyConfigured.fixed : false
                 };
             });
 
