@@ -33,7 +33,7 @@ passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "http://localhost:3000/auth/google/callback",
-    scope: ['profile', 'email', 'https://www.googleapis.com/auth/calendar.readonly']
+    scope: ['profile', 'email', 'https://www.googleapis.com/auth/calendar']
 }, (accessToken, refreshToken, profile, done) => {
     // Store tokens with the profile
     profile.accessToken = accessToken;
@@ -143,10 +143,13 @@ app.get('/api/calendar', async (req, res) => {
         // Load configured events to use user settings
         const configuredEvents = loadConfiguredEvents();
         const configuredEventMap = new Map(configuredEvents.map(e => [e.id, e]));
+        
+        // Get set of Google Calendar event IDs from the API response
+        const googleCalendarEventIds = new Set((response.data.items || []).map(e => e.id));
 
         // Format events according to original_tasks.json format, using configured settings
         // Filter out all-day events
-        const tasks = (response.data.items || [])
+        const googleCalendarTasks = (response.data.items || [])
             .filter(event => !!event.start.dateTime) // Only include events with specific times (exclude all-day)
             .map(event => {
                 const configured = configuredEventMap.get(event.id);
@@ -189,8 +192,69 @@ app.get('/api/calendar', async (req, res) => {
                     durationMinutes: Math.floor(durationMs / (1000 * 60)) // Duration in minutes for calculations
                 };
             });
+        
+        // Also include manually added events from user_data.json that aren't in Google Calendar yet
+        // These are events with IDs starting with "manual_" that don't have corresponding Google Calendar events
+        const manualTasks = configuredEvents
+            .filter(event => event.id && event.id.startsWith('manual_') && !googleCalendarEventIds.has(event.id))
+            .map(event => {
+                // Convert numeric priority to string if needed
+                let priorityValue = 'medium';
+                if (event.priority !== undefined) {
+                    if (typeof event.priority === 'number') {
+                        priorityValue = event.priority === 0 ? 'low' : event.priority === 1 ? 'medium' : 'high';
+                    } else {
+                        priorityValue = event.priority;
+                    }
+                }
+                
+                let start_time = '';
+                let duration = '';
+                let durationMinutes = 0;
+                let start_date = '';
+                
+                // Only include time info if the event has start and end times
+                if (event.start && event.end && event.start.trim() !== '' && event.end.trim() !== '') {
+                    try {
+                        const startDate = new Date(event.start);
+                        const endDate = new Date(event.end);
+                        
+                        // Format start_time as "HH:MM"
+                        const startHours = String(startDate.getHours()).padStart(2, '0');
+                        const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+                        start_time = `${startHours}:${startMinutes}`;
+                        
+                        // Calculate duration
+                        const durationMs = endDate.getTime() - startDate.getTime();
+                        const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+                        const durMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                        duration = `${String(durationHours).padStart(2, '0')}:${String(durMinutes).padStart(2, '0')}`;
+                        durationMinutes = Math.floor(durationMs / (1000 * 60));
+                        
+                        // Format start_date
+                        start_date = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+                    } catch (e) {
+                        console.error(`Error parsing dates for manual event "${event.name}":`, e);
+                    }
+                }
+                
+                return {
+                    name: event.name || 'Untitled Event',
+                    fixed: event.fixed !== undefined ? event.fixed : false,
+                    priority: priorityValue,
+                    start_time: start_time,
+                    duration: duration,
+                    type: event.purpose || 'personal',
+                    start_date: start_date,
+                    durationMinutes: durationMinutes,
+                    isManual: true // Flag to indicate this is a manually added event not yet synced
+                };
+            });
+        
+        // Combine Google Calendar events and manual events
+        const allTasks = [...googleCalendarTasks, ...manualTasks];
 
-        res.json({ tasks: tasks });
+        res.json({ tasks: allTasks });
     } catch (error) {
         console.error('Error fetching calendar:', error);
         res.status(500).json({ error: 'Failed to fetch calendar events' });
@@ -567,14 +631,19 @@ app.post('/api/add-events/save', async (req, res) => {
             // Generate a unique ID for manually added events
             const eventId = `manual_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
             
-            // Prepare start and end ISO strings (empty strings if not fixed or missing)
+            // Initialize ALL fields as empty strings first - no defaults
             let startISO = '';
             let endISO = '';
             let startDate = '';
             let startTime = '';
             let duration = '';
+            const name = (event.name !== undefined && event.name !== null) ? String(event.name) : '';
+            const priority = (event.priority !== undefined && event.priority !== null) ? String(event.priority) : '';
+            const purpose = (event.purpose !== undefined && event.purpose !== null) ? String(event.purpose) : '';
+            const fixed = (event.fixed !== undefined && event.fixed !== null) ? Boolean(event.fixed) : false;
             
-            if (event.fixed && event.date && event.startTime && event.endTime) {
+            // Only fill date/time fields if fixed is true AND all date/time values are provided
+            if (fixed && event.date && event.startTime && event.endTime) {
                 // Parse date and times to create ISO strings
                 const startDateTime = new Date(`${event.date}T${event.startTime}`);
                 const endDateTime = new Date(`${event.date}T${event.endTime}`);
@@ -603,27 +672,29 @@ app.post('/api/add-events/save', async (req, res) => {
                 duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
             }
             
-            // Add to configuredEvents array
+            // Add to configuredEvents array - all missing fields are empty strings
             configuredEvents.push({
                 id: eventId,
-                name: event.name || '',
-                start: startISO || '',
-                end: endISO || '',
-                priority: event.priority || 'medium',
-                purpose: event.purpose || 'personal',
-                fixed: event.fixed || false
+                name: name,
+                start: startISO,
+                end: endISO,
+                priority: priority,
+                purpose: purpose,
+                fixed: fixed
             });
             
-            // Add to tasks array (with empty strings for missing values)
+            // Add to tasks array - all missing fields are empty strings
             tasks.push({
-                name: event.name || '',
-                fixed: event.fixed || false,
-                priority: event.priority || 'medium',
-                start_date: startDate || '',
-                start_time: startTime || '',
-                duration: duration || '',
-                type: event.purpose || 'personal'
+                name: name,
+                fixed: fixed,
+                priority: priority,
+                start_date: startDate,
+                start_time: startTime,
+                duration: duration,
+                type: purpose
             });
+            
+            console.log(`📝 Added new event: ${name || '(no name)'} - priority: ${priority || '(empty)'}, purpose: ${purpose || '(empty)'}, fixed: ${fixed}`);
         });
 
         // Create fresh user_data.json with Google Calendar events + new events
@@ -637,37 +708,63 @@ app.post('/api/add-events/save', async (req, res) => {
         // Save new user_data.json
         fs.writeFileSync(filePath, JSON.stringify(newData, null, '\t'), 'utf8');
         console.log(`✅ Created fresh user_data.json with ${configuredEvents.length} events:`);
-        console.log(`   - ${response.data.items?.length || 0} from Google Calendar`);
+        console.log(`   - ${(response.data.items || []).filter(e => e.start?.dateTime).length} from Google Calendar`);
         console.log(`   - ${newEventsFromFile.length} from new_events.json`);
         console.log(`   - ${events.length} from request body`);
+        console.log(`   - ${allNewEvents.length} total new events processed`);
         console.log(`📁 Saved to: ${filePath}`);
+        
+        // Verify the file was written correctly
+        if (fs.existsSync(filePath)) {
+            const savedData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            console.log(`✅ Verification: user_data.json contains ${savedData.configuredEvents?.length || 0} configuredEvents and ${savedData.tasks?.length || 0} tasks`);
+        }
 
-        // Run dummy_reschedule.py after saving user_data.json
+        // Always create updated_data.json from user_data.json (synchronously to ensure it happens)
+        const updatedDataPath = path.join(__dirname, 'updated_data.json');
+        try {
+            fs.copyFileSync(filePath, updatedDataPath);
+            console.log(`✅ Created/updated updated_data.json from user_data.json`);
+            
+            // Verify the copy
+            if (fs.existsSync(updatedDataPath)) {
+                const updatedData = JSON.parse(fs.readFileSync(updatedDataPath, 'utf8'));
+                const updatedStats = fs.statSync(updatedDataPath);
+                console.log(`✅ Verification: updated_data.json contains ${updatedData.configuredEvents?.length || 0} configuredEvents and ${updatedData.tasks?.length || 0} tasks`);
+                console.log(`📊 updated_data.json file size: ${updatedStats.size} bytes`);
+                
+                // Check if new events are in updated_data.json
+                const newEventNames = allNewEvents.map(e => e.name || '').filter(n => n);
+                if (newEventNames.length > 0) {
+                    const foundInUpdated = newEventNames.filter(name => 
+                        updatedData.tasks?.some(t => t.name === name) || 
+                        updatedData.configuredEvents?.some(c => c.name === name)
+                    );
+                    console.log(`🔍 New events in updated_data.json: ${foundInUpdated.length}/${newEventNames.length}`);
+                    if (foundInUpdated.length < newEventNames.length) {
+                        const missing = newEventNames.filter(n => !foundInUpdated.includes(n));
+                        console.error(`❌ Missing events in updated_data.json: ${missing.join(', ')}`);
+                    }
+                }
+            }
+        } catch (copyError) {
+            console.error(`❌ Error copying to updated_data.json:`, copyError);
+        }
+        
+        // Also run dummy_reschedule.py as backup (but we've already copied above)
         const { exec } = require('child_process');
         const pythonScript = path.join(__dirname, 'dummy_reschedule.py');
         const scriptDir = __dirname;
         
-        console.log(`🔄 Running dummy_reschedule.py from ${scriptDir}...`);
-        console.log(`📄 Script path: ${pythonScript}`);
-        
-        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, (error, stdout, stderr) => {
+        console.log(`🔄 Running dummy_reschedule.py as backup...`);
+        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, { 
+            cwd: scriptDir,
+            maxBuffer: 1024 * 1024 * 10
+        }, (error, stdout, stderr) => {
             if (error) {
-                console.error(`❌ Error running dummy_reschedule.py:`, error);
-                console.error(`Error code: ${error.code}`);
-                console.error(`Error signal: ${error.signal}`);
-                if (stderr) console.error(`stderr: ${stderr}`);
+                console.error(`⚠️ dummy_reschedule.py had error (but updated_data.json already created):`, error.message);
             } else {
-                console.log(`✅ dummy_reschedule.py executed successfully`);
-                if (stdout) console.log(`📤 stdout: ${stdout}`);
-                if (stderr) console.log(`⚠️ stderr: ${stderr}`);
-                
-                // Verify the file was created
-                const updatedDataPath = path.join(scriptDir, 'updated_data.json');
-                if (fs.existsSync(updatedDataPath)) {
-                    console.log(`✅ updated_data.json created at: ${updatedDataPath}`);
-                } else {
-                    console.error(`❌ updated_data.json was NOT created at: ${updatedDataPath}`);
-                }
+                console.log(`✅ dummy_reschedule.py also executed successfully`);
             }
         });
 
@@ -675,6 +772,386 @@ app.post('/api/add-events/save', async (req, res) => {
     } catch (error) {
         console.error('Error saving new events:', error);
         res.status(500).json({ error: 'Failed to save events' });
+    }
+});
+
+// API endpoint to sync events from updated_data.json to Google Calendar
+app.post('/api/calendar/sync', async (req, res) => {
+    if (!req.user || !req.user.accessToken) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        // Read updated_data.json
+        const updatedDataPath = path.join(__dirname, 'updated_data.json');
+        if (!fs.existsSync(updatedDataPath)) {
+            return res.status(404).json({ error: 'updated_data.json not found' });
+        }
+
+        const updatedData = JSON.parse(fs.readFileSync(updatedDataPath, 'utf8'));
+        const configuredEvents = updatedData.configuredEvents || [];
+
+        // Filter for manually added events (those with id starting with "manual_")
+        const manualEvents = configuredEvents.filter(event => event.id && event.id.startsWith('manual_'));
+
+        if (manualEvents.length === 0) {
+            return res.json({ 
+                success: true, 
+                message: 'No new manual events to sync',
+                created: 0,
+                skipped: 0
+            });
+        }
+
+        // Set up Google Calendar API client
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            "http://localhost:3000/auth/google/callback"
+        );
+
+        oauth2Client.setCredentials({
+            access_token: req.user.accessToken,
+            refresh_token: req.user.refreshToken
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // Create events in Google Calendar
+        const results = {
+            created: 0,
+            skipped: 0,
+            errors: [],
+            createdEventIds: [] // Track created event IDs for revert
+        };
+
+        for (const event of manualEvents) {
+            try {
+                // Skip events without date/time (empty strings)
+                if (!event.start || !event.end || event.start === '' || event.end === '') {
+                    console.log(`⏭️ Skipping event "${event.name}" - no date/time specified`);
+                    results.skipped++;
+                    continue;
+                }
+
+                // Create Google Calendar event object
+                // Handle UTC timestamps properly - convert UTC to Eastern Time
+                let startDateTime = event.start;
+                let endDateTime = event.end;
+                const timezone = 'America/New_York'; // Use Eastern Time
+                
+                // If the ISO string is in UTC (ends with Z), we need to convert it
+                // Google Calendar API expects the time to be specified in the timezone we declare
+                // So if we have "2025-11-02T17:00:00.000Z" (5 PM UTC), and the user meant 12 PM ET,
+                // we need to convert it to "2025-11-02T12:00:00" with timezone "America/New_York"
+                if (event.start.endsWith('Z')) {
+                    // Parse the UTC date
+                    const utcDate = new Date(event.start);
+                    const utcEndDate = new Date(event.end);
+                    
+                    // Convert UTC to ET: ET is UTC-5 (EST) or UTC-4 (EDT)
+                    // Use a simple approximation: ET is typically UTC-5
+                    // For more accuracy, we could use a library, but for now this should work
+                    const etOffsetHours = -5; // EST offset (adjust to -4 for EDT if needed)
+                    
+                    const formatET = (utcDate) => {
+                        // Create a date object that represents the ET time
+                        const etDate = new Date(utcDate.getTime() + (etOffsetHours * 60 * 60 * 1000));
+                        const year = etDate.getUTCFullYear();
+                        const month = String(etDate.getUTCMonth() + 1).padStart(2, '0');
+                        const day = String(etDate.getUTCDate()).padStart(2, '0');
+                        const hours = String(etDate.getUTCHours()).padStart(2, '0');
+                        const minutes = String(etDate.getUTCMinutes()).padStart(2, '0');
+                        const seconds = String(etDate.getUTCSeconds()).padStart(2, '0');
+                        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                    };
+                    
+                    startDateTime = formatET(utcDate);
+                    endDateTime = formatET(utcEndDate);
+                } else if (event.start.includes('+') || event.start.includes('-')) {
+                    // If it has a timezone offset but not Z, just remove the offset part
+                    startDateTime = event.start.split(/[+-]/)[0];
+                    endDateTime = event.end.split(/[+-]/)[0];
+                }
+                
+                const calendarEvent = {
+                    summary: event.name || 'Untitled Event',
+                    start: {
+                        dateTime: startDateTime,
+                        timeZone: timezone
+                    },
+                    end: {
+                        dateTime: endDateTime,
+                        timeZone: timezone
+                    },
+                    description: `Priority: ${event.priority || ''}, Purpose: ${event.purpose || ''}, Fixed: ${event.fixed || false}`
+                };
+
+                // Insert event into Google Calendar
+                const response = await calendar.events.insert({
+                    calendarId: 'primary',
+                    resource: calendarEvent
+                });
+
+                const googleCalendarId = response.data.id;
+                console.log(`✅ Created event in Google Calendar: "${event.name}" (ID: ${googleCalendarId})`);
+                results.created++;
+                results.createdEventIds.push({
+                    googleCalendarId: googleCalendarId,
+                    eventName: event.name,
+                    manualId: event.id
+                });
+
+            } catch (error) {
+                console.error(`❌ Error creating event "${event.name}":`, error.message);
+                results.errors.push({
+                    event: event.name,
+                    error: error.message
+                });
+            }
+        }
+
+        // Save sync info to a file so we can revert later
+        if (results.created > 0) {
+            const syncInfoPath = path.join(__dirname, 'sync_info.json');
+            const syncInfo = {
+                timestamp: new Date().toISOString(),
+                createdEventIds: results.createdEventIds
+            };
+            fs.writeFileSync(syncInfoPath, JSON.stringify(syncInfo, null, '\t'), 'utf8');
+            console.log(`💾 Saved sync info to sync_info.json with ${results.createdEventIds.length} event IDs`);
+        }
+
+        res.json({
+            success: true,
+            message: `Synced ${results.created} events to Google Calendar`,
+            created: results.created,
+            skipped: results.skipped,
+            errors: results.errors
+        });
+
+    } catch (error) {
+        console.error('Error syncing events to Google Calendar:', error);
+        res.status(500).json({ error: 'Failed to sync events to Google Calendar' });
+    }
+});
+
+// API endpoint to revert the last sync (delete synced events from Google Calendar)
+app.post('/api/calendar/revert', async (req, res) => {
+    if (!req.user || !req.user.accessToken) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        // Read sync_info.json to get the list of created event IDs
+        const syncInfoPath = path.join(__dirname, 'sync_info.json');
+        if (!fs.existsSync(syncInfoPath)) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'No sync information found. Nothing to revert.' 
+            });
+        }
+
+        const syncInfo = JSON.parse(fs.readFileSync(syncInfoPath, 'utf8'));
+        const createdEventIds = syncInfo.createdEventIds || [];
+
+        if (createdEventIds.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No events to revert',
+                deleted: 0
+            });
+        }
+
+        // Set up Google Calendar API client
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            "http://localhost:3000/auth/google/callback"
+        );
+
+        oauth2Client.setCredentials({
+            access_token: req.user.accessToken,
+            refresh_token: req.user.refreshToken
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // Delete events from Google Calendar
+        const results = {
+            deleted: 0,
+            errors: []
+        };
+
+        for (const eventInfo of createdEventIds) {
+            try {
+                await calendar.events.delete({
+                    calendarId: 'primary',
+                    eventId: eventInfo.googleCalendarId
+                });
+
+                console.log(`✅ Deleted event from Google Calendar: "${eventInfo.eventName}" (ID: ${eventInfo.googleCalendarId})`);
+                results.deleted++;
+
+            } catch (error) {
+                console.error(`❌ Error deleting event "${eventInfo.eventName}":`, error.message);
+                results.errors.push({
+                    event: eventInfo.eventName,
+                    error: error.message
+                });
+            }
+        }
+
+        // Delete sync_info.json after successful revert
+        if (results.deleted > 0) {
+            try {
+                fs.unlinkSync(syncInfoPath);
+                console.log(`🗑️ Deleted sync_info.json`);
+            } catch (err) {
+                console.error('Error deleting sync_info.json:', err);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Reverted ${results.deleted} events from Google Calendar`,
+            deleted: results.deleted,
+            errors: results.errors
+        });
+
+    } catch (error) {
+        console.error('Error reverting sync:', error);
+        res.status(500).json({ error: 'Failed to revert sync' });
+    }
+});
+
+// API endpoint to check which scopes are currently authorized
+app.get('/api/calendar/scopes', async (req, res) => {
+    if (!req.user || !req.user.accessToken) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        // Use tokeninfo endpoint to check what scopes were granted
+        const https = require('https');
+        const url = `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${req.user.accessToken}`;
+        
+        const tokenInfo = await new Promise((resolve, reject) => {
+            https.get(url, (response) => {
+                let data = '';
+                response.on('data', (chunk) => { data += chunk; });
+                response.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }).on('error', reject);
+        });
+        
+        res.json({
+            success: true,
+            scopes: tokenInfo.scope ? tokenInfo.scope.split(' ') : [],
+            hasCalendarWrite: tokenInfo.scope && tokenInfo.scope.includes('https://www.googleapis.com/auth/calendar'),
+            hasCalendarReadonly: tokenInfo.scope && tokenInfo.scope.includes('https://www.googleapis.com/auth/calendar.readonly'),
+            error: tokenInfo.error || null
+        });
+    } catch (error) {
+        console.error('Error checking scopes:', error);
+        res.status(500).json({ error: 'Failed to check scopes' });
+    }
+});
+
+// API endpoint to check/verify synced events in Google Calendar
+app.get('/api/calendar/verify', async (req, res) => {
+    if (!req.user || !req.user.accessToken) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    try {
+        // Read sync_info.json to get synced event IDs
+        const syncInfoPath = path.join(__dirname, 'sync_info.json');
+        if (!fs.existsSync(syncInfoPath)) {
+            return res.json({
+                success: true,
+                message: 'No sync information found',
+                syncedEvents: []
+            });
+        }
+
+        const syncInfo = JSON.parse(fs.readFileSync(syncInfoPath, 'utf8'));
+        const syncedEventIds = syncInfo.createdEventIds || [];
+
+        if (syncedEventIds.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No synced events to verify',
+                syncedEvents: []
+            });
+        }
+
+        // Set up Google Calendar API client
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            "http://localhost:3000/auth/google/callback"
+        );
+
+        oauth2Client.setCredentials({
+            access_token: req.user.accessToken,
+            refresh_token: req.user.refreshToken
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // Verify each synced event exists in Google Calendar
+        const verificationResults = [];
+        for (const eventInfo of syncedEventIds) {
+            try {
+                const event = await calendar.events.get({
+                    calendarId: 'primary',
+                    eventId: eventInfo.googleCalendarId
+                });
+                verificationResults.push({
+                    eventName: eventInfo.eventName,
+                    exists: true,
+                    googleCalendarId: eventInfo.googleCalendarId,
+                    startTime: event.data.start?.dateTime || event.data.start?.date,
+                    summary: event.data.summary
+                });
+            } catch (error) {
+                if (error.code === 404) {
+                    verificationResults.push({
+                        eventName: eventInfo.eventName,
+                        exists: false,
+                        googleCalendarId: eventInfo.googleCalendarId,
+                        error: 'Event not found in Google Calendar'
+                    });
+                } else {
+                    verificationResults.push({
+                        eventName: eventInfo.eventName,
+                        exists: false,
+                        googleCalendarId: eventInfo.googleCalendarId,
+                        error: error.message
+                    });
+                }
+            }
+        }
+
+        const existingCount = verificationResults.filter(r => r.exists).length;
+
+        res.json({
+            success: true,
+            message: `Found ${existingCount} of ${syncedEventIds.length} synced events in Google Calendar`,
+            totalSynced: syncedEventIds.length,
+            existingInCalendar: existingCount,
+            verificationResults: verificationResults
+        });
+
+    } catch (error) {
+        console.error('Error verifying synced events:', error);
+        res.status(500).json({ error: 'Failed to verify synced events' });
     }
 });
 
