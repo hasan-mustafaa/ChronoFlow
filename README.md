@@ -28,7 +28,7 @@ As people who have experienced stress due to the absurd amount of things we do i
 ## What it does
 
 ChronoFlow analyzes your tasks based around priorities and available time-blocks, using it to automatically schedule optimal time slots for tasks and meetings. It also resolves conflicts in scheduling and promotes both long periods of work and relaxing tasks between. It can connect directly to your Google Calendar and add events in between personalized for your preferences.
-How we built it
+## How we built it
 
 We chose Node.js for the frontend and Python 3 for the backend. Transferring data between these is done using JSON files. We used GPT-5-mini for cost effectiveness and it also supports taking into consideration the multitude of factors that go behind an optimal schedule
 
