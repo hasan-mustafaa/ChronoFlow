@@ -596,9 +596,8 @@
 
     <script>
         let eventsData = [];
-        let timeRange = 'week'; // Default to week
+        let timeRange = 'week'; 
 
-        // Load user info
         fetch('/auth/user')
             .then(response => response.json())
             .then(data => {
@@ -612,8 +611,6 @@
                 console.error('Error loading user:', error);
                 window.location.href = '/';
             });
-
-        // Load available time ranges
         function loadTimeRanges() {
             fetch('/api/setup/time-ranges')
                 .then(response => response.json())
@@ -639,7 +636,6 @@
                 });
         }
 
-        // Load events that need configuration
         function loadEvents() {
             document.getElementById('loading').style.display = 'block';
             document.getElementById('events-list').style.display = 'none';
@@ -682,7 +678,6 @@
             loadEvents(); // Reload events with new time range
         }
 
-        // Set up event listeners after DOM loads
         function setupToggle() {
             const toggle = document.getElementById('timeRangeToggle');
             if (toggle) {
@@ -696,17 +691,14 @@
             }
         }
 
-        // Try to set up immediately
         setupToggle();
-        
-        // Also set up when DOM is ready
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', setupToggle);
         } else {
             setupToggle();
         }
 
-        // Initial load
         loadTimeRanges();
         loadEvents();
 
@@ -718,14 +710,10 @@
             eventsList.innerHTML = events.map((event, index) => {
                 const startDate = new Date(event.start);
                 const endDate = new Date(event.end);
-                
-                // Format date as YYYY-MM-DD for date input
                 const startYear = startDate.getFullYear();
                 const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
                 const startDay = String(startDate.getDate()).padStart(2, '0');
                 const dateStr = `${startYear}-${startMonth}-${startDay}`;
-                
-                // Format time as HH:MM for time input
                 const startHours = String(startDate.getHours()).padStart(2, '0');
                 const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
                 const startTimeStr = `${startHours}:${startMinutes}`;
@@ -815,23 +803,15 @@
         function toggleOption(element, field, index) {
             const toggleGroup = element.parentElement;
             const value = element.getAttribute('data-value');
-            
-            // Remove active class from all siblings
             toggleGroup.querySelectorAll('.toggle-option').forEach(opt => {
                 opt.classList.remove('active');
             });
-            
-            // Add active class to clicked option
             element.classList.add('active');
-            
-            // Update data (priority is now a string: 'low', 'medium', 'high')
             updateEventData(index, field, value);
         }
-
         function updateEventData(index, field, value) {
             eventsData[index][field] = value;
         }
-
         function updateStartTime(index) {
             const dateInput = document.getElementById(`date-${index}`);
             const startTimeInput = document.getElementById(`start-time-${index}`);
@@ -842,12 +822,9 @@
                 const startTime = startTimeInput.value;
                 const endTime = endTimeInput.value;
                 
-                // Update min attribute on end time to prevent selecting earlier time
                 endTimeInput.setAttribute('min', startTime);
                 
-                // Validate end time is not before start time
                 if (endTime && endTime < startTime) {
-                    // Set end time to start time + 1 hour as default
                     const [hours, minutes] = startTime.split(':');
                     let endHours = parseInt(hours) + 1;
                     if (endHours >= 24) {
@@ -874,8 +851,6 @@
                 const date = dateInput.value;
                 const startTime = startTimeInput.value;
                 const endTime = endTimeInput.value;
-                
-                // Validate end time is not before start time
                 if (endTime && endTime < startTime) {
                     alert('End time cannot be earlier than start time. Please select a valid end time.');
                     // Reset to previous valid value or set to start time + 1 hour
@@ -906,16 +881,14 @@
             if (!endTime) endTime = endTimeInput.value;
             
             if (date && startTime && endTime) {
-                // Combine date and time to create new Date objects
+
                 const startDateTime = new Date(`${date}T${startTime}`);
                 const endDateTime = new Date(`${date}T${endTime}`);
-                
-                // If end time is still before start time on same day, assume end is next day
+
                 if (endDateTime <= startDateTime) {
                     endDateTime.setDate(endDateTime.getDate() + 1);
                 }
                 
-                // Update the eventsData with new datetime strings
                 eventsData[index].start = startDateTime.toISOString();
                 eventsData[index].end = endDateTime.toISOString();
             }
@@ -951,8 +924,6 @@
             const button = document.querySelector('.btn-primary');
             button.disabled = true;
             button.textContent = 'Saving...';
-
-            // Get time ranges
             const timeRanges = {
                 personal: {
                     start: document.getElementById('personal-start').value,

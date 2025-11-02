@@ -6,7 +6,7 @@
     <title>ChronoFlow - Calendar</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-        // Verify Chart.js loaded
+
         window.addEventListener('load', function() {
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js failed to load!');
@@ -519,14 +519,12 @@
                 
                 if (tasks.length > 0) {
                     eventsContainer.innerHTML = tasks.map(task => {
-                        // Convert numeric priority to string if needed (for backward compatibility)
                         let priorityDisplay = task.priority;
                         if (typeof task.priority === 'number') {
                             priorityDisplay = task.priority === 0 ? 'low' : task.priority === 1 ? 'medium' : 'high';
                         } else if (typeof task.priority === 'string') {
                             priorityDisplay = task.priority;
                         }
-                        // Capitalize first letter
                         priorityDisplay = priorityDisplay.charAt(0).toUpperCase() + priorityDisplay.slice(1);
                         
                         // Get purpose/type and capitalize it
@@ -548,7 +546,6 @@
                         `;
                     }).join('');
                     
-                    // Update analytics after loading events
                     updateAnalytics(tasks);
                 } else {
                     eventsContainer.innerHTML = '<div class="loading">No upcoming events found.</div>';
@@ -560,15 +557,11 @@
                 document.getElementById('events-container').innerHTML = 
                     '<div class="error">Failed to load calendar events. Please try again.</div>';
             });
-
-        // Embed Google Calendar iframe
-        // Get user email for calendar embedding
         fetch('/auth/user')
             .then(response => response.json())
             .then(data => {
                 if (data.user && data.user.emails && data.user.emails[0]) {
                     const userEmail = encodeURIComponent(data.user.emails[0].value);
-                    // Set height parameter to show more hours (8 AM to 12 PM/noon, covering full day)
                     const calendarSrc = `https://calendar.google.com/calendar/embed?src=${userEmail}&ctz=America%2FNew_York&mode=week&wkst=1&height=840`;
                     
                     const calendarContainer = document.getElementById('calendar-container');
@@ -590,7 +583,6 @@
                     '<div class="error">Failed to load calendar. Please try again.</div>';
             });
 
-        // Analytics and Visualizations
         let timeDistributionChart = null;
         let priorityChart = null;
 
@@ -602,7 +594,6 @@
                 document.getElementById('totalHours').textContent = '0';
                 document.getElementById('fixedEvents').textContent = '0';
                 document.getElementById('flexibleEvents').textContent = '0';
-                // Clear charts
                 if (timeDistributionChart) {
                     timeDistributionChart.destroy();
                     timeDistributionChart = null;
@@ -614,7 +605,6 @@
                 return;
             }
 
-            // Calculate statistics
             const stats = {
                 total: tasks.length,
                 totalMinutes: 0,
@@ -633,14 +623,11 @@
             };
 
             tasks.forEach(task => {
-                // Calculate duration in minutes
                 let durationMinutes = 0;
-                
-                // First, try to use durationMinutes if available
+
                 if (task.durationMinutes !== undefined && task.durationMinutes !== null) {
                     durationMinutes = parseInt(task.durationMinutes) || 0;
                 } 
-                // Otherwise, parse from duration string (HH:MM format)
                 else if (task.duration) {
                     const durationParts = task.duration.split(':');
                     if (durationParts.length === 2) {
@@ -654,14 +641,12 @@
                 
                 stats.totalMinutes += durationMinutes;
 
-                // Count fixed/flexible
                 if (task.fixed) {
                     stats.fixed++;
                 } else {
                     stats.flexible++;
                 }
 
-                // Count by purpose/type
                 const purpose = (task.type || 'personal').toLowerCase();
                 if (purpose === 'personal' || purpose === 'business' || purpose === 'school') {
                     stats.byPurpose[purpose] += durationMinutes;
@@ -669,16 +654,14 @@
                     stats.byPurpose.personal += durationMinutes; // Default to personal
                 }
 
-                // Count by priority
                 const priority = (task.priority || 'medium').toLowerCase();
                 if (priority === 'low' || priority === 'medium' || priority === 'high') {
                     stats.byPriority[priority]++;
                 } else {
-                    stats.byPriority.medium++; // Default to medium
+                    stats.byPriority.medium++; 
                 }
             });
 
-            // Update stat cards
             document.getElementById('totalEvents').textContent = stats.total;
             const totalHours = (stats.totalMinutes / 60).toFixed(1);
             document.getElementById('totalHours').textContent = totalHours;
@@ -693,7 +676,6 @@
                 byPriority: stats.byPriority
             });
 
-            // Update charts - wait a bit to ensure DOM is ready
             setTimeout(() => {
                 updateTimeDistributionChart(stats.byPurpose);
                 updatePriorityChart(stats.byPriority);
@@ -709,7 +691,6 @@
 
             console.log('Updating time distribution chart with data:', byPurpose);
 
-            // Destroy existing chart if it exists
             if (timeDistributionChart) {
                 timeDistributionChart.destroy();
                 timeDistributionChart = null;
@@ -721,14 +702,12 @@
             
             const total = personalHours + businessHours + schoolHours;
             console.log('Hours - Personal:', personalHours, 'Business:', businessHours, 'School:', schoolHours, 'Total:', total);
-            
-            // If no data, show a message
+
             if (total === 0) {
                 ctx.parentElement.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">No time data available for visualization</p>';
                 return;
             }
 
-            // Check if Chart is available
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js is not loaded!');
                 ctx.parentElement.innerHTML = '<p style="color: red;">Chart library not loaded. Please refresh the page.</p>';
@@ -800,7 +779,6 @@
             const ctx = document.getElementById('priorityChart');
             if (!ctx) return;
 
-            // Destroy existing chart if it exists
             if (priorityChart) {
                 priorityChart.destroy();
             }
@@ -876,7 +854,6 @@
                     statusDiv.textContent = data.message || `Successfully synced ${data.created} events to Google Calendar. ${data.skipped > 0 ? `${data.skipped} events skipped (no date/time).` : ''}`;
                     if (data.created > 0) {
                         revertBtn.disabled = false;
-                        // Store sync info for revert
                         sessionStorage.setItem('lastSyncInfo', JSON.stringify({
                             created: data.created,
                             timestamp: new Date().toISOString()
@@ -888,8 +865,6 @@
                 }
                 syncBtn.disabled = false;
                 syncBtn.textContent = 'Sync to Google Calendar';
-                
-                // Reload the calendar iframe to show new events
                 setTimeout(() => {
                     const iframe = document.querySelector('.calendar-embed');
                     if (iframe) {
@@ -939,8 +914,7 @@
                     revertBtn.disabled = false;
                 }
                 revertBtn.textContent = 'Revert Last Sync';
-                
-                // Reload the calendar iframe
+
                 setTimeout(() => {
                     const iframe = document.querySelector('.calendar-embed');
                     if (iframe) {
@@ -956,8 +930,6 @@
                 revertBtn.textContent = 'Revert Last Sync';
             });
         }
-
-        // Check if there's a recent sync on page load
         window.addEventListener('load', function() {
             const lastSync = sessionStorage.getItem('lastSyncInfo');
             if (lastSync) {

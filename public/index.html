@@ -22,8 +22,6 @@
             position: relative;
             overflow: hidden;
         }
-
-        /* Animated background elements */
         body::before {
             content: '';
             position: absolute;
@@ -561,12 +559,10 @@
     </div>
 
     <script>
-        // Check if user is authenticated on page load
         fetch('/auth/user')
             .then(response => response.json())
             .then(data => {
                 if (data.user) {
-                    // Redirect to calendar page if already logged in
                     window.location.href = '/calendar';
                 }
             })
