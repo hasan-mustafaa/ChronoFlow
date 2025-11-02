@@ -12,34 +12,45 @@ def ask(prompt):
 
     return response.output_text
 
+
 class Task:
     name: str
     fixed: bool
-    priority: int # 0 (low) - 2 (high)
-    start_date: date
-    start_time: time
-    duration: time
+    priority: int  # -1 (Undetermined), 0 (low) - 2 (high)
+    start_date: date | None
+    start_time: time | None
+    end_time: time | None
+    duration: int | None  # in minutes
     _type: str
 
-    def __init__(self, n, f, p, sd, st, d, t):
+    def __init__(self, n, f, p, sd, st, et, d, t):
         self.name = n
-        self.fixed=f
+        self.fixed = f
+        self.priority = p
         self.start_date = sd
-        self.start_time=st
-        self.duration=d
-        self.priority=p
-        self._type=t
+        self.start_time = st
+        self.end_time = et
+        self.duration = d
+        self._type = t
 
     def __str__(self):
         return json.dumps({
             "name": self.name,
             "fixed": self.fixed,
             "priority": self.priority,
-            "start_date": self.start_date.strftime("%Y-%m-%d"),
-            "start_time": self.start_time.strftime("%H:%M"),
-            "duration": self.duration.strftime("%H:%M"),
+            "start_date": self.start_date.strftime("%Y-%m-%d") if self.start_date else "",
+            "start_time": self.start_time.strftime("%H:%M") if self.start_time else "",
+            "end_time": self.end_time.strftime("%H:%M") if self.end_time else "",
+            "duration": self.duration if self.duration else "",
             "type": self._type
         })
+
+def in_minutes(t):
+    return t.hour * 60 + t.minute
+
+def add_minutes(t, minutes):
+    full_minutes = in_minutes(t) + minutes
+    return datetime.strptime(f"{full_minutes//60:02d}:{full_minutes%60:02d}", "%H:%M").time()
 
 def extract_data_from_json(file_path):
     with open(file_path, 'r') as file:
@@ -60,13 +71,6 @@ def extract_data_from_json(file_path):
         tasks.append(task)
 
     return times, tasks
-
-def in_minutes(t):
-    return t.hour * 60 + t.minute
-
-def add_minutes(t, minutes):
-    full_minutes = in_minutes(t) + minutes
-    return datetime.strptime(f"{full_minutes//60:02d}:{full_minutes%60:02d}", "%H:%M").time()
 
 
 def validate(times, tasks, to_validate):
@@ -136,6 +140,38 @@ def validate(times, tasks, to_validate):
                 return False, f"Tasks {t1['name']} and {t2['name']} overlap"
 
     return True
+
+prompt = f"""
+You are a scheduling assistant. 
+You are given task data with some missing start times, start dates, or durations. 
+Your job is to fill in ALL missing values and output a COMPLETE schedule as valid JSON.
+Priority of -1 indicates you should generate the priority as well (between 0-2).
+
+Rules:
+- The JSON you output must have the structure:
+    {{
+        "tasks": [
+        {{
+        "name": "...",
+        "fixed": true/false,
+        "priority": 0-2,
+        "start_date": "YYYY-MM-DD",
+        "start_time": "HH:MM",
+        "duration": "HH:MM",
+        "type": "personal|business|school"
+        }}
+        ]
+    }}
+- Fixed tasks cannot change their date or time.
+- Tasks cannot overlap.
+- Tasks must fit within the time windows provided:
+  {json.dumps(times, indent=4)}
+
+Here is the current task data:
+{json.dumps(tasks_data, indent=4)}
+
+Now generate a new, valid schedule JSON with all missing values filled in.
+"""
 
 
 
