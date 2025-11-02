@@ -171,37 +171,68 @@ if __name__ == "__main__":
 
     print("asking")
     print(prompt)
-    response = ask(prompt)
+
+    response_text = ask(prompt)
     print("received")
-    gpt_json = json.loads(response)
-    _, gpt_tasks = extract_data_from_json(gpt_json)
-    is_valid, message = validate(times, tasks, gpt_tasks)
 
     max_attempts = 5
     attempt = 0
+    is_valid = False
+    message = ""
+    gpt_json = {}
 
     while attempt < max_attempts and not is_valid:
-        new_prompt = f"""
-    The previous schedule you generated was invalid.
+        try:
+            gpt_json = json.loads(response_text)
+        except json.JSONDecodeError:
+            response_text = ask(f"""
+    The previous response was not valid JSON. 
+    Please output ONLY a valid JSON object following this structure:
 
-    Reason for failure:
-    {message}
+    {{
+        "tasks": [
+            {{
+                "uid": "...",
+                "name": "...",
+                "fixed": true/false,
+                "priority": 0–2,
+                "start_date": "YYYY-MM-DD",
+                "start_time": "HH:MM",
+                "end_time": "HH:MM",
+                "duration": <minutes>,
+                "type": "personal|business|school"
+            }}
+        ]
+    }}
+    Do not include any commentary or extra text. Here was your last invalid response:
+    {response_text}
+    {prompt}
+    """)
+            attempt += 1
+            continue
 
-    Fix the issues while keeping all rules the same.
-    Regenerate a full valid schedule JSON that passes all validations.
-
-    Here is the last schedule you produced:
-    {json.dumps(gpt_json, indent=4)}
-    """
-        gpt_json = json.loads(ask(prompt + new_prompt))
         _, gpt_tasks = extract_data_from_json(gpt_json)
         is_valid, message = validate(times, tasks, gpt_tasks)
-        attempt += 1
 
+        if not is_valid:
+            response_text = ask(f"""
+    The previous schedule was invalid.
+
+    Reason: {message}
+
+    Fix the issues and regenerate a valid JSON schedule following all rules.
+    Here was your last invalid JSON:
+    {json.dumps(gpt_json, indent=4)}
+    {prompt}
+    """)
+            attempt += 1
+        else:
+            break
+
+    # Save if valid, otherwise fail gracefully
     if is_valid:
         with open("updated_data.json", "w") as f:
             json.dump(gpt_json, f, indent=4)
     else:
-        pass
-        # print("Failed to produce a valid schedule after several attempts.")
+        print("Failed to produce a valid schedule after several attempts.")
 
