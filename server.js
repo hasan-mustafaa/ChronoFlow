@@ -459,29 +459,217 @@ app.post('/api/add-events/save', async (req, res) => {
             return res.status(400).json({ error: 'Invalid events data' });
         }
 
-        // Prepare new events data with name, priority, purpose, fixed, and date/time if fixed
-        const newEventsData = events.map(event => {
-            const eventData = {
-                name: event.name,
+        // Fetch events from Google Calendar - completely ignoring any existing user_data.json
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            "http://localhost:3000/auth/google/callback"
+        );
+
+        oauth2Client.setCredentials({
+            access_token: req.user.accessToken,
+            refresh_token: req.user.refreshToken
+        });
+
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // Get events for the next 30 days from today
+        const now = new Date();
+        const timeMinDate = new Date(now);
+        timeMinDate.setHours(0, 0, 0, 0);
+        
+        const timeMaxDate = new Date(now);
+        timeMaxDate.setDate(timeMaxDate.getDate() + 30);
+        timeMaxDate.setHours(23, 59, 59, 999);
+
+        const response = await calendar.events.list({
+            calendarId: 'primary',
+            timeMin: timeMinDate.toISOString(),
+            timeMax: timeMaxDate.toISOString(),
+            maxResults: 2500,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+
+        // Process Google Calendar events (excluding all-day events)
+        const configuredEvents = [];
+        const tasks = [];
+
+        (response.data.items || []).forEach(event => {
+            // Skip all-day events
+            if (!event.start.dateTime) return;
+
+            const start = event.start.dateTime;
+            const end = event.end.dateTime;
+            const startDate = new Date(start);
+            const endDate = new Date(end);
+
+            // Format for configuredEvents - using defaults, no existing config preserved
+            configuredEvents.push({
+                id: event.id,
+                name: event.summary || 'Untitled Event',
+                start: start,
+                end: end,
+                priority: 'medium',
+                purpose: 'personal',
+                fixed: false
+            });
+
+            // Format for tasks array
+            const startYear = startDate.getFullYear();
+            const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+            const startDay = String(startDate.getDate()).padStart(2, '0');
+            const start_date = `${startYear}-${startMonth}-${startDay}`;
+
+            const startHours = String(startDate.getHours()).padStart(2, '0');
+            const startMinutes = String(startDate.getMinutes()).padStart(2, '0');
+            const start_time = `${startHours}:${startMinutes}`;
+
+            const durationMs = endDate.getTime() - startDate.getTime();
+            const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+            const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+            const duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
+
+            // Format for tasks array - using defaults, no existing config preserved
+            tasks.push({
+                name: event.summary || 'Untitled Event',
+                fixed: false,
+                priority: 'medium',
+                start_date: start_date,
+                start_time: start_time,
+                duration: duration,
+                type: 'personal'
+            });
+        });
+
+        // Read events from new_events.json file if it exists
+        const newEventsFilePath = path.join(__dirname, 'new_events.json');
+        let newEventsFromFile = [];
+        if (fs.existsSync(newEventsFilePath)) {
+            try {
+                const fileContent = fs.readFileSync(newEventsFilePath, 'utf8');
+                newEventsFromFile = JSON.parse(fileContent);
+                if (!Array.isArray(newEventsFromFile)) {
+                    newEventsFromFile = [];
+                }
+                console.log(`📄 Read ${newEventsFromFile.length} events from new_events.json`);
+            } catch (err) {
+                console.error('Error reading new_events.json:', err);
+                newEventsFromFile = [];
+            }
+        }
+
+        // Combine events from request body and new_events.json
+        const allNewEvents = [...newEventsFromFile, ...events];
+
+        // Process all new manually added events (from file + request)
+        allNewEvents.forEach((event, index) => {
+            // Generate a unique ID for manually added events
+            const eventId = `manual_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Prepare start and end ISO strings (empty strings if not fixed or missing)
+            let startISO = '';
+            let endISO = '';
+            let startDate = '';
+            let startTime = '';
+            let duration = '';
+            
+            if (event.fixed && event.date && event.startTime && event.endTime) {
+                // Parse date and times to create ISO strings
+                const startDateTime = new Date(`${event.date}T${event.startTime}`);
+                const endDateTime = new Date(`${event.date}T${event.endTime}`);
+                
+                // If end time is before start time, assume it's next day
+                if (endDateTime <= startDateTime) {
+                    endDateTime.setDate(endDateTime.getDate() + 1);
+                }
+                
+                startISO = startDateTime.toISOString();
+                endISO = endDateTime.toISOString();
+                
+                // Format for tasks array
+                const startYear = startDateTime.getFullYear();
+                const startMonth = String(startDateTime.getMonth() + 1).padStart(2, '0');
+                const startDay = String(startDateTime.getDate()).padStart(2, '0');
+                startDate = `${startYear}-${startMonth}-${startDay}`;
+                
+                const startHours = String(startDateTime.getHours()).padStart(2, '0');
+                const startMinutes = String(startDateTime.getMinutes()).padStart(2, '0');
+                startTime = `${startHours}:${startMinutes}`;
+                
+                const durationMs = endDateTime.getTime() - startDateTime.getTime();
+                const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+                const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                duration = `${String(durationHours).padStart(2, '0')}:${String(durationMinutes).padStart(2, '0')}`;
+            }
+            
+            // Add to configuredEvents array
+            configuredEvents.push({
+                id: eventId,
+                name: event.name || '',
+                start: startISO || '',
+                end: endISO || '',
                 priority: event.priority || 'medium',
                 purpose: event.purpose || 'personal',
                 fixed: event.fixed || false
-            };
+            });
             
-            // Include date, startTime, and endTime if fixed is true
-            if (event.fixed && event.date && event.startTime && event.endTime) {
-                eventData.date = event.date;
-                eventData.startTime = event.startTime;
-                eventData.endTime = event.endTime;
-            }
-            
-            return eventData;
+            // Add to tasks array (with empty strings for missing values)
+            tasks.push({
+                name: event.name || '',
+                fixed: event.fixed || false,
+                priority: event.priority || 'medium',
+                start_date: startDate || '',
+                start_time: startTime || '',
+                duration: duration || '',
+                type: event.purpose || 'personal'
+            });
         });
 
-        // Save to new_events.json
-        const filePath = path.join(__dirname, 'new_events.json');
-        fs.writeFileSync(filePath, JSON.stringify(newEventsData, null, '\t'), 'utf8');
-        console.log(`New events saved to ${filePath}`);
+        // Create fresh user_data.json with Google Calendar events + new events
+        const filePath = path.join(__dirname, 'user_data.json');
+        const newData = {
+            configuredEvents: configuredEvents,
+            tasks: tasks,
+            timeRanges: null
+        };
+
+        // Save new user_data.json
+        fs.writeFileSync(filePath, JSON.stringify(newData, null, '\t'), 'utf8');
+        console.log(`✅ Created fresh user_data.json with ${configuredEvents.length} events:`);
+        console.log(`   - ${response.data.items?.length || 0} from Google Calendar`);
+        console.log(`   - ${newEventsFromFile.length} from new_events.json`);
+        console.log(`   - ${events.length} from request body`);
+        console.log(`📁 Saved to: ${filePath}`);
+
+        // Run dummy_reschedule.py after saving user_data.json
+        const { exec } = require('child_process');
+        const pythonScript = path.join(__dirname, 'dummy_reschedule.py');
+        const scriptDir = __dirname;
+        
+        console.log(`🔄 Running dummy_reschedule.py from ${scriptDir}...`);
+        console.log(`📄 Script path: ${pythonScript}`);
+        
+        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`❌ Error running dummy_reschedule.py:`, error);
+                console.error(`Error code: ${error.code}`);
+                console.error(`Error signal: ${error.signal}`);
+                if (stderr) console.error(`stderr: ${stderr}`);
+            } else {
+                console.log(`✅ dummy_reschedule.py executed successfully`);
+                if (stdout) console.log(`📤 stdout: ${stdout}`);
+                if (stderr) console.log(`⚠️ stderr: ${stderr}`);
+                
+                // Verify the file was created
+                const updatedDataPath = path.join(scriptDir, 'updated_data.json');
+                if (fs.existsSync(updatedDataPath)) {
+                    console.log(`✅ updated_data.json created at: ${updatedDataPath}`);
+                } else {
+                    console.error(`❌ updated_data.json was NOT created at: ${updatedDataPath}`);
+                }
+            }
+        });
 
         res.json({ success: true });
     } catch (error) {
