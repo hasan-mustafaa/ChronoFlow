@@ -1,102 +1,61 @@
-# ChronoFlow
-
-A basic website with Google OAuth 2.0 authentication built with Node.js and Express.
-
-## Features
-
-- 🔐 Google OAuth 2.0 authentication
-- 🎨 Modern, responsive UI
-- 🔒 Secure session management
-- 🚀 Easy setup and deployment
-
-## Prerequisites
-
-- Node.js (v14 or higher)
-- npm (comes with Node.js)
-- Google Cloud Platform account
-
-## Setup Instructions
-
-### 1. Install Dependencies
-
-```bash
-npm install
+## Installation and running
+Download (and extract) the .git file  
+Run npm install in the directory  
+Run npm start  
+A server will startup and you can trying authorizing your calendar but this will fail as is due to Hasan having to add you as a beta tester due to the program being untrusted by google.  
+You can attempt to get your own API keys and Secrets by creating a .env file as such:  
 ```
-
-### 2. Set Up Google OAuth Credentials
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the Google+ API:
-   - Navigate to "APIs & Services" > "Library"
-   - Search for "Google+ API" and enable it
-4. Create OAuth 2.0 credentials:
-   - Go to "APIs & Services" > "Credentials"
-   - Click "Create Credentials" > "OAuth client ID"
-   - Choose "Web application"
-   - Add authorized redirect URI: `http://localhost:3000/auth/google/callback`
-   - Copy your Client ID and Client Secret
-
-### 3. Configure Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-GOOGLE_CLIENT_ID=your-google-client-id-here
-GOOGLE_CLIENT_SECRET=your-google-client-secret-here
-SESSION_SECRET=your-random-session-secret-here
+GOOGLE_CLIENT_ID=YOUR_ID
+GOOGLE_CLIENT_SECRET=YOUR_SECRET
+SESSION_SECRET=YOUR_SECRET_2
 PORT=3000
+OPENAI_API_KEY="key"
 ```
+OPENAI_API_KEY is needed for queries to GPT 5 mini but needs to be paid through your account.  
+You can also test the scheduler without messing with Google Calendar by using these files:  
+reschedule.py - Actual scheduler prompting the LLM  
+demo.py - Prints old schedule and new schedule as ASCII!  
+user_data.json - Input JSON for reschedule.py  
+updated_data.json - output from reschedule.py and input for demo.py  
 
-**Important:** 
-- Replace `your-google-client-id-here` and `your-google-client-secret-here` with your actual Google OAuth credentials
-- Generate a random string for `SESSION_SECRET` (you can use `openssl rand -base64 32` or any random string generator)
 
-### 4. Run the Application
 
-```bash
-npm start
-```
+## Inspiration
 
-The server will start on `http://localhost:3000`
+We wanted to build a tool that optimizes your workflow intelligently, using AI to consider several points of view simultaneously necessitating less work from the user. This can combat the challenge of managing increasingly complex workflows.
 
-### 5. Test the Authentication
+As people who have experienced stress due to the absurd amount of things we do in our very limited time, we wanted to solve this task using expertise. That motivated ChronoFlow.
+## What it does
 
-1. Open your browser and navigate to `http://localhost:3000`
-2. Click "Sign in with Google"
-3. Authorize the application with your Google account
-4. You should see your profile information displayed
+ChronoFlow analyzes your tasks based around priorities and available time-blocks, using it to automatically schedule optimal time slots for tasks and meetings. It also resolves conflicts in scheduling and promotes both long periods of work and relaxing tasks between. It can connect directly to your Google Calendar and add events in between personalized for your preferences.
+How we built it
 
-## Project Structure
+We chose Node.js for the frontend and Python 3 for the backend. Transferring data between these is done using JSON files. We used GPT-5-mini for cost effectiveness and it also supports taking into consideration the multitude of factors that go behind an optimal schedule
 
-```
-ChronoFlow/
-├── public/
-│   └── index.html      # Frontend HTML file
-├── server.js           # Express server with OAuth routes
-├── package.json        # Dependencies and scripts
-├── .env               # Environment variables (create this)
-├── .gitignore         # Git ignore file
-└── README.md          # This file
-```
+We integrated Google Calendar API to extract your current events and sync it after optimizing Finally, we built a UI/dashboard where users can adjust preferences (work hours, focus sessions, meeting-free blocks) and view their optimized schedule
+## Challenges we ran into
 
-## Technologies Used
+Calendar API works inconsistently: We tried using old documentation and updating to new api calls was neither fun or reliable. Merging frontend and backend: JSON output obtained after extracting events was very different from expected backend JSON
+## Accomplishments that we're proud of
 
-- **Express.js** - Web framework
-- **Passport.js** - Authentication middleware
-- **passport-google-oauth20** - Google OAuth 2.0 strategy
-- **express-session** - Session management
-- **dotenv** - Environment variable management
+We built a working prototype where users can see optimized schedules and report fewer context switches and better task-completion rates. We achieved seamless integration with calendar systems (Google) so users don’t have to leave their existing tools.
 
-## Production Deployment
+We incorporated user-preferences (e.g., focus time, no-meeting blocks) that the system respects, making the scheduling feel personalized.
+## What we learned
 
-When deploying to production:
+Mastery of every part of the code base is needed to quickly fix errors caused my miscommunication
+## What's next for ChronoFlow
 
-1. Update the authorized redirect URI in Google Cloud Console to match your production domain
-2. Set `cookie.secure: true` in `server.js` (requires HTTPS)
-3. Use a strong, randomly generated `SESSION_SECRET`
-4. Consider using a proper session store (Redis, MongoDB) instead of the default memory store
+Investigate a multi-calendar overlap algorithm: analyse two or more users’ calendar free/busy slots, apply interval-overlap logic (as discussed in a scheduling problem for two persons), then extend it to team-sized groups and embed preference-constraints (e.g., preferred hours, meeting-free zones) so ChronoFlow can suggest optimal common slots automatically.
 
-## License
+Prototype task-management tool integrations with platforms like Trello and Asana: leverage existing API/automation frameworks (e.g., two-way-sync integrations already done between Trello and Asana), to feed tasks into ChronoFlow’s scheduling engine and reflect scheduled time-blocks back into the task systems.
+Built With
 
-MIT
+    css
+    googlecalendarapi
+    gpt-5-mini
+    html
+    javascript
+    json
+    node.js
+
