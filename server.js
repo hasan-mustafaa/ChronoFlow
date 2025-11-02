@@ -707,6 +707,7 @@ app.post('/api/add-events/save', async (req, res) => {
 
         // Save new user_data.json
         fs.writeFileSync(filePath, JSON.stringify(newData, null, '\t'), 'utf8');
+<<<<<<< HEAD
         console.log(`✅ Created fresh user_data.json with ${configuredEvents.length} events:`);
         console.log(`   - ${(response.data.items || []).filter(e => e.start?.dateTime).length} from Google Calendar`);
         console.log(`   - ${newEventsFromFile.length} from new_events.json`);
@@ -719,6 +720,9 @@ app.post('/api/add-events/save', async (req, res) => {
             const savedData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             console.log(`✅ Verification: user_data.json contains ${savedData.configuredEvents?.length || 0} configuredEvents and ${savedData.tasks?.length || 0} tasks`);
         }
+=======
+        console.log(`Created user_data.json`);
+>>>>>>> 6d1a0dba7a4647d2e49376ad45adfdd565a02873
 
         // Always create updated_data.json from user_data.json (synchronously to ensure it happens)
         const updatedDataPath = path.join(__dirname, 'updated_data.json');
@@ -756,6 +760,7 @@ app.post('/api/add-events/save', async (req, res) => {
         const pythonScript = path.join(__dirname, 'dummy_reschedule.py');
         const scriptDir = __dirname;
         
+<<<<<<< HEAD
         console.log(`🔄 Running dummy_reschedule.py as backup...`);
         exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, { 
             cwd: scriptDir,
@@ -765,6 +770,25 @@ app.post('/api/add-events/save', async (req, res) => {
                 console.error(`⚠️ dummy_reschedule.py had error (but updated_data.json already created):`, error.message);
             } else {
                 console.log(`✅ dummy_reschedule.py also executed successfully`);
+=======
+        exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`Error code: ${error.code}`);
+                console.error(`Error signal: ${error.signal}`);
+                if (stderr) console.error(`stderr: ${stderr}`);
+            } else {
+                console.log(`✅ dummy_reschedule.py executed successfully`);
+                if (stdout) console.log(`stdout: ${stdout}`);
+                if (stderr) console.log(`stderr: ${stderr}`);
+                
+                // Verify the file was created
+                const updatedDataPath = path.join(scriptDir, 'updated_data.json');
+                if (fs.existsSync(updatedDataPath)) {
+                    console.log(`✅ updated_data.json created at: ${updatedDataPath}`);
+                } else {
+                    console.error(`❌ updated_data.json was NOT created at: ${updatedDataPath}`);
+                }
+>>>>>>> 6d1a0dba7a4647d2e49376ad45adfdd565a02873
             }
         });
 
@@ -1183,7 +1207,6 @@ app.get('/auth/logout', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('Make sure you have set up your Google OAuth credentials in .env file');
+    console.log(`http://localhost:${PORT}`);
 });
 

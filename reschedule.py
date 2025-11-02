@@ -53,93 +53,108 @@ def add_minutes(t, minutes):
     return datetime.strptime(f"{full_minutes//60:02d}:{full_minutes%60:02d}", "%H:%M").time()
 
 def extract_data_from_json(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, "r") as file:
         data = json.load(file)
 
-    times = data['times']
+    times = data.get("times", {})
     tasks = []
-    for task_data in data['tasks']:
-        name = task_data['name']
-        fixed = task_data['fixed']
-        priority = task_data['priority']
-        start_date = datetime.strptime(task_data['start_date'], "%Y-%m-%d").date()
-        start_time = datetime.strptime(task_data['start_time'], "%H:%M").time()
-        duration = datetime.strptime(task_data['duration'], "%H:%M").time()
-        _type = task_data['type']
-        
-        task = Task(name, fixed, priority, start_date, start_time, duration, _type)
+    for task_data in data["tasks"]:
+        name = task_data["name"]
+        fixed = task_data["fixed"]
+        priority = task_data.get("priority", -1)
+
+        sd = None
+        if task_data.get("start_date"):
+            sd = datetime.strptime(task_data["start_date"], "%Y-%m-%d").date()
+        st = None
+        if task_data.get("start_time"):
+            st = datetime.strptime(task_data["start_time"], "%H:%M").time()
+        et = None
+        if task_data.get("end_time"):
+            et = datetime.strptime(task_data["end_time"], "%H:%M").time()
+        d = None
+        if task_data.get("duration"):
+            d = int(task_data["duration"])  # duration in minutes
+
+        _type = task_data["type"]
+
+        task = Task(name, fixed, priority, sd, st, et, d, _type)
         tasks.append(task)
 
     return times, tasks
 
 
 def validate(times, tasks, to_validate):
+    # Build lookup for original tasks
     task_dict = {t.name: t for t in tasks}
     task_names = set(task_dict.keys())
     output_names = {t["name"] for t in to_validate}
 
-    for name in task_names:
-        if name not in output_names:
-            return False, f"You did not add {name} in your output.\n"
+    # Check missing or extra tasks
+    for name in task_names - output_names:
+        return False, f"You did not add {name} in your output.\n"
+    for name in output_names - task_names:
+        return False, f"You added an extra task {name} in your output.\n"
 
-    for name in output_names:
-        if name not in task_names:
-            return False, f"You added an extra task {name} in your output.\n"
-
-    # duplicate list for easy comparison
+    # Parse output into Task-like dicts for validation
     output_tasks = []
     for t in to_validate:
         orig = task_dict[t["name"]]
-        start_date = datetime.strptime(t.get("date", orig.start_date.strftime("%Y-%m-%d")), "%Y-%m-%d").date()
-        start_time = datetime.strptime(t.get("start_time", orig.start_time.strftime("%H:%M")), "%H:%M").time()
-        duration_minutes = orig.duration.hour * 60 + orig.duration.minute
-        end_time = add_minutes(start_time, duration_minutes)
+        start_date = datetime.strptime(t["start_date"], "%Y-%m-%d").date()
+        start_time = datetime.strptime(t["start_time"], "%H:%M").time()
+        end_time = datetime.strptime(t["end_time"], "%H:%M").time()
+        duration = int(t["duration"])
+
+        # check duration consistency
+        actual_duration = in_minutes(end_time) - in_minutes(start_time)
+        if actual_duration != duration:
+            return False, f"Task {t['name']} has inconsistent duration: expected {actual_duration}, got {duration}.\n"
+
         output_tasks.append({
             "name": t["name"],
             "start_date": start_date,
             "start_time": start_time,
             "end_time": end_time,
+            "duration": duration,
             "fixed": orig.fixed,
+            "priority": t["priority"],
             "type": orig._type
         })
 
+    # Fixed task validation
     for t in output_tasks:
         if t["fixed"]:
             orig = task_dict[t["name"]]
             if t["start_date"] != orig.start_date or t["start_time"] != orig.start_time:
                 return False, f"Fixed task {t['name']} has changed start date or time.\n"
 
+    # Priority validation
+    for t in output_tasks:
+        orig = task_dict[t["name"]]
+        if orig.priority != -1 and t["priority"] != orig.priority:
+            return False, f"Task {t['name']} has changed its priority improperly.\n"
 
+    # Type time window validation
     for t in output_tasks:
         t_type = t["type"]
         start_limit = datetime.strptime(times[t_type]["start"], "%H:%M").time()
         end_limit = datetime.strptime(times[t_type]["end"], "%H:%M").time()
 
-        t_start_min = in_minutes(t["start_time"])
-        t_end_min = in_minutes(t["end_time"])
-        start_min = in_minutes(start_limit)
-        end_min = in_minutes(end_limit)
-        if t_start_min < start_min:
-            return False, f"Task {t['name']} starts before allowed {t_type} start time {start_limit.strftime('%H:%M')}.\n"
-        if t_end_min > end_min:
-            return False, f"Task {t['name']} ends after allowed {t_type} end time {end_limit.strftime('%H:%M')}.\n"
+        if in_minutes(t["start_time"]) < in_minutes(start_limit):
+            return False, f"Task {t['name']} starts before allowed {t_type} start time.\n"
+        if in_minutes(t["end_time"]) > in_minutes(end_limit):
+            return False, f"Task {t['name']} ends after allowed {t_type} end time.\n"
 
-    # O(n^2) I know
-    for i in range(len(output_tasks)):
-        t1 = output_tasks[i]
-        for j in range(i+1, len(output_tasks)):
-            t2 = output_tasks[j]
-            if t1["start_date"] != t2["start_date"]:
-                continue
-            t1_start = in_minutes(t1["start_time"])
-            t1_end = in_minutes(t1["end_time"])
-            t2_start = in_minutes(t2["start_time"])
-            t2_end = in_minutes(t2["end_time"])
+    # Overlap check
+    output_tasks.sort(key=lambda x: (x["start_date"], x["start_time"]))
+    for i in range(len(output_tasks) - 1):
+        t1, t2 = output_tasks[i], output_tasks[i + 1]
+        if t1["start_date"] != t2["start_date"]:
+            continue
+        if in_minutes(t1["end_time"]) > in_minutes(t2["start_time"]):
+            return False, f"Tasks {t1['name']} and {t2['name']} overlap.\n"
 
-            if not (t1_end <= t2_start or t2_end <= t1_start):
-                return False, f"Tasks {t1['name']} and {t2['name']} overlap"
-
-    return True
+    return True, "All validations passed."
 
 prompt = f"""
 You are a scheduling assistant. 
@@ -176,8 +191,9 @@ Now generate a new, valid schedule JSON with all missing values filled in.
 
 
 times, tasks = extract_data_from_json("user_data.json")
-with open("test_output.json", 'r') as file:
+with open("test_output.json", "r") as file:
     data = json.load(file)["tasks"]
+
 isValid, output = validate(times, tasks, data)
 print(isValid, output)
 
