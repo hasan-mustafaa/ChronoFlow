@@ -636,30 +636,22 @@ app.post('/api/add-events/save', async (req, res) => {
 
         // Save new user_data.json
         fs.writeFileSync(filePath, JSON.stringify(newData, null, '\t'), 'utf8');
-        console.log(`✅ Created fresh user_data.json with ${configuredEvents.length} events:`);
-        console.log(`   - ${response.data.items?.length || 0} from Google Calendar`);
-        console.log(`   - ${newEventsFromFile.length} from new_events.json`);
-        console.log(`   - ${events.length} from request body`);
-        console.log(`📁 Saved to: ${filePath}`);
+        console.log(`Created user_data.json`);
 
         // Run dummy_reschedule.py after saving user_data.json
         const { exec } = require('child_process');
         const pythonScript = path.join(__dirname, 'dummy_reschedule.py');
         const scriptDir = __dirname;
         
-        console.log(`🔄 Running dummy_reschedule.py from ${scriptDir}...`);
-        console.log(`📄 Script path: ${pythonScript}`);
-        
         exec(`cd "${scriptDir}" && python3 dummy_reschedule.py`, (error, stdout, stderr) => {
             if (error) {
-                console.error(`❌ Error running dummy_reschedule.py:`, error);
                 console.error(`Error code: ${error.code}`);
                 console.error(`Error signal: ${error.signal}`);
                 if (stderr) console.error(`stderr: ${stderr}`);
             } else {
                 console.log(`✅ dummy_reschedule.py executed successfully`);
-                if (stdout) console.log(`📤 stdout: ${stdout}`);
-                if (stderr) console.log(`⚠️ stderr: ${stderr}`);
+                if (stdout) console.log(`stdout: ${stdout}`);
+                if (stderr) console.log(`stderr: ${stderr}`);
                 
                 // Verify the file was created
                 const updatedDataPath = path.join(scriptDir, 'updated_data.json');
@@ -706,7 +698,6 @@ app.get('/auth/logout', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('Make sure you have set up your Google OAuth credentials in .env file');
+    console.log(`http://localhost:${PORT}`);
 });
 
