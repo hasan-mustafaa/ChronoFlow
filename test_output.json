@@ -1,6 +1,24 @@
 {
-	"Cleanig": "08:00",
-	"Study": "10:00",
-	"Lecture 1": "13:00",
-	"Lecture 2": "15:00"
+	"tasks": [
+		{
+			"name": "Cleaning",
+			"date": "2025-11-04",
+			"start_time": "09:00"
+		},
+		{
+			"name": "Study",
+			"date": "2025-11-04",
+			"start_time": "11:00"
+		},
+		{
+			"name": "Lecture 1",
+			"date": "2025-11-04",
+			"start_time": "8:59"
+		},
+		{
+			"name": "Lecture 2",
+			"date": "2025-11-04",
+			"start_time": "15:00"
+		}
+	]
 }
